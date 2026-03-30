@@ -222,12 +222,8 @@ public class ResultResponseAdvice implements ResponseBodyAdvice<Object> {
     /// @param locale The locale.
     /// @return The localized title.
 	private String resolveTitle(BaseFailure error, Locale locale) {
-		try {
-			return this.messageSource.getMessage("error.title." + error.getClass().getSimpleName(), null,
-					error.getTitle(), locale);
-		} catch (final Exception _) {
-			return error.getTitle();
-		}
+		return Result.attempt(() -> this.messageSource.getMessage("error.title." + error.getClass().getSimpleName(),
+				null, error.getTitle(), locale), _ -> error.getTitle()).fold(title -> title, title -> title);
 	}
 
 	/// Logs the error if configured.

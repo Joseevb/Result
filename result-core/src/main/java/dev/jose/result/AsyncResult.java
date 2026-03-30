@@ -7,7 +7,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
@@ -34,8 +33,8 @@ import java.util.stream.Collectors;
 /// # Key Characteristics
 /// - Lazy: transformations build a computation graph without executing
 /// - Short-circuiting: first Failure propagates immediately, cancelling pending work
-/// - Composable: chain with [this.map], [this.flatMap], [this.combine]
-/// - Collectible: aggregate multiple async results with [this.collectAll]
+/// - Composable: chain with [#map], [#flatMap], [#combine]
+/// - Collectible: aggregate multiple async results with [#collectAll]
 ///
 /// # Creation
 /// ```java
@@ -71,32 +70,32 @@ import java.util.stream.Collectors;
 public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResult.Completed {
 
 	/// Internal record representing an async computation in progress.
-    ///
-    /// This is the primary implementation, wrapping a CompletableFuture that
-    /// will eventually produce a Result.
-    ///
-    /// @param future The underlying future of Result.
+	///
+	/// This is the primary implementation, wrapping a CompletableFuture that
+	/// will eventually produce a Result.
+	///
+	/// @param future The underlying future of Result.
 	record Pending<T, E>(CompletableFuture<Result<T, E>> future) implements AsyncResult<T, E> {
 	}
 
 	/// Internal record representing an already-completed async computation.
-    ///
-    /// Used as an optimization to avoid wrapping already-resolved Results
-    /// in unnecessary CompletableFutures.
-    ///
-    /// @param result The completed Result.
+	///
+	/// Used as an optimization to avoid wrapping already-resolved Results
+	/// in unnecessary CompletableFutures.
+	///
+	/// @param result The completed Result.
 	record Completed<T, E>(Result<T, E> result) implements AsyncResult<T, E> {
 	}
 
 	/// Creates an AsyncResult from an existing CompletableFuture of Result.
-    ///
-    /// Use this when you already have a future that produces Results, such as
-    /// from a custom async operation.
-    ///
-    /// @param future The future to wrap.
-    /// @return A new Pending AsyncResult.
+	///
+	/// Use this when you already have a future that produces Results, such as
+	/// from a custom async operation.
+	///
+	/// @param future The future to wrap.
+	/// @return A new Pending AsyncResult.
 	@Contract(value = "_ -> new", pure = true)
-	static <T, E> @NonNull AsyncResult<T, E> of(CompletableFuture<Result<T, E>> future) {
+	static <T, E> @NonNull AsyncResult<T, E> of(@NonNull CompletableFuture<Result<T, E>> future) {
 		if (future.isDone()) {
 			// Optimization: if already complete, avoid the wrapper
 			try {
@@ -109,59 +108,59 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 	}
 
 	/// Creates an AsyncResult from a CompletionStage of Result.
-    ///
-    /// Convenience overload for APIs returning CompletionStage.
-    ///
-    /// @param stage The completion stage to wrap.
-    /// @return A new AsyncResult.
+	///
+	/// Convenience overload for APIs returning CompletionStage.
+	///
+	/// @param stage The completion stage to wrap.
+	/// @return A new AsyncResult.
 	@Contract("_ -> new")
 	static <T, E> @NonNull AsyncResult<T, E> fromStage(@NonNull CompletionStage<Result<T, E>> stage) {
 		return of(stage.toCompletableFuture());
 	}
 
 	/// Wraps an existing Result in a completed AsyncResult.
-    ///
-    /// Useful for synchronous fallbacks or cached values in async chains.
-    ///
-    /// # Example
-    /// ```java
-    /// AsyncResult<User, Error> result = cache.get(id)
-    ///     .map(AsyncResult::<User, Error>completed)
-    ///     .orElseGet(() -> fetchFromApi(id));
-    /// ```
-    ///
-    /// @param result The result to wrap.
-    /// @return An already-completed AsyncResult.
+	///
+	/// Useful for synchronous fallbacks or cached values in async chains.
+	///
+	/// # Example
+	/// ```java
+	/// AsyncResult<User, Error> result = cache.get(id)
+	///     .map(AsyncResult::<User, Error>completed)
+	///     .orElseGet(() -> fetchFromApi(id));
+	/// ```
+	///
+	/// @param result The result to wrap.
+	/// @return An already-completed AsyncResult.
 	@Contract("_ -> new")
 	static <T, E> @NonNull AsyncResult<T, E> completed(Result<T, E> result) {
 		return new Completed<>(result);
 	}
 
 	/// Wraps a CompletableFuture, catching exceptions as Failure.
-    ///
-    /// This is the primary entry point for integrating external async APIs.
-    /// Any exception thrown during the future's execution is mapped to a Failure
-    /// using the provided error mapper.
-    ///
-    /// # Example
-    /// ```java
-    /// AsyncResult<User, UserError> userAsync = AsyncResult.attempt(
-    ///     webClient.get()
-    ///         .uri("/users/{id}", id)
-    ///         .retrieve()
-    ///         .bodyToMono(User.class)
-    ///         .toFuture(),
-    ///     ex -> switch (ex) {
-    ///         case WebClientResponseException.NotFound _ -> new UserError.NotFound(id);
-    ///         case WebClientResponseException w -> new UserError.HttpError(w.getStatusCode());
-    ///         default -> new UserError.Unexpected(ex);
-    ///     }
-    /// );
-    /// ```
-    ///
-    /// @param future The future to wrap.
-    /// @param errorMapper Maps exceptions to domain errors.
-    /// @return An AsyncResult that catches all exceptions.
+	///
+	/// This is the primary entry point for integrating external async APIs.
+	/// Any exception thrown during the future's execution is mapped to a Failure
+	/// using the provided error mapper.
+	///
+	/// # Example
+	/// ```java
+	/// AsyncResult<User, UserError> userAsync = AsyncResult.attempt(
+	///     webClient.get()
+	///         .uri("/users/{id}", id)
+	///         .retrieve()
+	///         .bodyToMono(User.class)
+	///         .toFuture(),
+	///     ex -> switch (ex) {
+	///         case WebClientResponseException.NotFound _ -> new UserError.NotFound(id);
+	///         case WebClientResponseException w -> new UserError.HttpError(w.getStatusCode());
+	///         default -> new UserError.Unexpected(ex);
+	///     }
+	/// );
+	/// ```
+	///
+	/// @param future The future to wrap.
+	/// @param errorMapper Maps exceptions to domain errors.
+	/// @return An AsyncResult that catches all exceptions.
 	@Contract("_, _ -> new")
 	static <T, E> @NonNull AsyncResult<T, E> attempt(@NonNull CompletableFuture<T> future,
 			Function<Throwable, E> errorMapper) {
@@ -171,45 +170,42 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 	}
 
 	/// Creates a completed successful AsyncResult.
-    ///
-    /// @param value The success value.
-    /// @return A completed AsyncResult containing the value.
+	///
+	/// @param value The success value.
+	/// @return A completed AsyncResult containing the value.
 	@Contract("_ -> new")
 	static <T, E> @NonNull AsyncResult<T, E> success(T value) {
 		return completed(Result.success(value));
 	}
 
 	/// Creates a completed failed AsyncResult.
-    ///
-    /// @param error The domain error.
-    /// @return A completed AsyncResult containing the error.
+	///
+	/// @param error The domain error.
+	/// @return A completed AsyncResult containing the error.
 	@Contract("_ -> new")
 	static <T, E> @NonNull AsyncResult<T, E> failure(E error) {
 		return completed(Result.failure(error));
 	}
 
 	/// Collects multiple AsyncResults into one, short-circuiting on first failure.
-    ///
-    /// All input AsyncResults execute in parallel. Results are collected using
-    /// the provided collector. If any AsyncResult fails, the entire collection
-    /// fails with that error (fail-fast).
-    ///
-    /// Completed AsyncResults are optimized to not spawn additional futures.
-    ///
-    /// # Example
-    /// ```java
-    /// List<AsyncResult<Product, Error>> fetches = ids.stream()
-    ///     .map(this::fetchProduct)
-    ///     .toList();
-    ///
-    /// AsyncResult<List<Product>, Error> all = AsyncResult.collectAll(fetches);
-    /// ```
-    ///
-    /// @param asyncResults The AsyncResults to collect.
-    /// @param collector The collector to combine success values.
-    /// @return An AsyncResult containing all values or first error.
+	///
+	/// All input AsyncResults execute in parallel. If any AsyncResult fails,
+	/// the entire collection fails with that error (fail-fast).
+	///
+	/// # Example
+	/// ```java
+	/// List<AsyncResult<Product, Error>> fetches = ids.stream()
+	///     .map(this::fetchProduct)
+	///     .toList();
+	///
+	/// AsyncResult<List<Product>, Error> all = AsyncResult.collectAll(fetches);
+	/// ```
+	///
+	/// @param asyncResults The AsyncResults to collect.
+	/// @param collector The collector to combine success values.
+	/// @return An AsyncResult containing all values or first error.
 	static <T, E, A, R> @NonNull AsyncResult<R, E> collectAll(@NonNull List<AsyncResult<T, E>> asyncResults,
-			Collector<? super T, A, R> collector) {
+			@NonNull Collector<? super T, A, R> collector) {
 
 		if (asyncResults.isEmpty()) {
 			@SuppressWarnings("unchecked")
@@ -220,86 +216,107 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 		// Optimization: check if all are already completed
 		final boolean allCompleted = asyncResults.stream().allMatch(Completed.class::isInstance);
 		if (allCompleted) {
-			final List<Result<T, E>> results = asyncResults.stream().map(r -> ((Completed<T, E>) r).result()).toList();
-
-			final Optional<E> firstError = results.stream().filter(Result::isFailure)
-					.map(r -> ((Result.Failure<T, E>) r).error()).findFirst();
-
-			if (firstError.isPresent()) {
-				return failure(firstError.get());
-			}
-
-			final A accumulator = collector.supplier().get();
-			final BiConsumer<A, ? super T> accumulatorAction = collector.accumulator();
-
-			results.stream().map(r -> ((Result.Success<T, E>) r).value())
-					.forEach(v -> accumulatorAction.accept(accumulator, v));
-
-			return success(collector.finisher().apply(accumulator));
+			return combineCompleted(asyncResults, collector);
 		}
 
-		// General case: collect futures
-		final List<CompletableFuture<Result<T, E>>> futures = asyncResults.stream().map(AsyncResult::toFuture).toList();
-
-		final CompletableFuture<Void> allDone = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
-
-		return new Pending<>(allDone.thenApply(_ -> {
-			// Check for failures first (fail-fast)
-			final Optional<E> firstError = futures.stream().map(CompletableFuture::join).filter(Result::isFailure)
-					.map(r -> ((Result.Failure<T, E>) r).error()).findFirst();
-
-			if (firstError.isPresent()) {
-				return Result.failure(firstError.get());
-			}
-
-			// Collect all success values
-			final A accumulator = collector.supplier().get();
-			final BiConsumer<A, ? super T> accumulatorAction = collector.accumulator();
-
-			futures.stream().map(CompletableFuture::join).map(r -> ((Result.Success<T, E>) r).value())
-					.forEach(v -> accumulatorAction.accept(accumulator, v));
-
-			final R finished = collector.finisher().apply(accumulator);
-			return Result.success(finished);
-		}));
+		// General case: proper parallel collection
+		return collectParallel(asyncResults, collector);
 	}
 
 	/// Convenience overload collecting into a List.
-    ///
-    /// @param asyncResults The AsyncResults to collect.
-    /// @return An AsyncResult containing a List of all values.
-	static <T, E> @NonNull AsyncResult<List<T>, E> collectAll(List<AsyncResult<T, E>> asyncResults) {
+	///
+	/// @param asyncResults The AsyncResults to collect.
+	/// @return An AsyncResult containing a List of all values.
+	static <T, E> @NonNull AsyncResult<List<T>, E> collectAll(@NonNull List<AsyncResult<T, E>> asyncResults) {
 		return collectAll(asyncResults, Collectors.toList());
 	}
 
-	/// Sequences a list of AsyncResults, preserving order.
-    ///
-    /// Alias for [this.collectAll] with List collector. Semantically clearer when
-    /// you just want all results in order.
-    ///
-    /// @param asyncResults The AsyncResults to sequence.
-    /// @return An AsyncResult containing all values in order.
-	static <T, E> @NonNull AsyncResult<List<T>, E> sequence(List<AsyncResult<T, E>> asyncResults) {
+	/// Sequences a list of AsyncResults — semantic alias for collectAll.
+	///
+	/// @param asyncResults The AsyncResults to sequence.
+	/// @param collector The collector to combine success values.
+	/// @return An AsyncResult containing all values or first error.
+	static <T, E, A, R> @NonNull AsyncResult<R, E> sequence(@NonNull List<AsyncResult<T, E>> asyncResults,
+			@NonNull Collector<? super T, A, R> collector) {
+		return collectAll(asyncResults, collector);
+	}
+
+	/// Convenience overload collecting into a List.
+	///
+	/// @param asyncResults The AsyncResults to sequence.
+	/// @return An AsyncResult containing a List of all values.
+	static <T, E> @NonNull AsyncResult<List<T>, E> sequence(@NonNull List<AsyncResult<T, E>> asyncResults) {
 		return collectAll(asyncResults);
 	}
 
+	/// Combines already-completed results without spawning new async work.
+	private static <T, E, A, R> AsyncResult<R, E> combineCompleted(@NonNull List<AsyncResult<T, E>> asyncResults,
+			@NonNull Collector<? super T, A, R> collector) {
+
+		final A accumulator = collector.supplier().get();
+		final BiConsumer<A, ? super T> accAction = collector.accumulator();
+
+		for (final AsyncResult<T, E> ar : asyncResults) {
+			final Result<T, E> result = ((Completed<T, E>) ar).result();
+			switch (result) {
+				case Result.Success(var val) -> accAction.accept(accumulator, val);
+				case Result.Failure(var err) -> {
+					return failure(err);
+				}
+			}
+		}
+
+		return success(collector.finisher().apply(accumulator));
+	}
+
+	/// Proper parallel collection using CompletableFuture.allOf.
+	private static <T, E, A, R> @NonNull AsyncResult<R, E> collectParallel(
+			@NonNull List<AsyncResult<T, E>> asyncResults, Collector<? super T, A, R> collector) {
+
+		final List<CompletableFuture<Result<T, E>>> futures = asyncResults.stream().map(AsyncResult::toFuture).toList();
+
+		// allOf completes when ALL futures complete (success or failure)
+		final CompletableFuture<Void> allDone = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
+
+		final CompletableFuture<Result<R, E>> resultFuture = allDone.thenApply(_ -> {
+			// Now all futures are done, we can inspect them without blocking
+			final A accumulator = collector.supplier().get();
+			final BiConsumer<A, ? super T> accAction = collector.accumulator();
+
+			for (final CompletableFuture<Result<T, E>> future : futures) {
+				// join() is safe here — we know it's complete
+				final Result<T, E> result = future.join();
+				switch (result) {
+					case Result.Success(var val) -> accAction.accept(accumulator, val);
+					case Result.Failure(var err) -> {
+						return Result.failure(err);
+					}
+				}
+			}
+
+			return Result.success(collector.finisher().apply(accumulator));
+		});
+
+		return new Pending<>(resultFuture);
+	}
+
 	/// Races multiple AsyncResults, returning the first to complete.
-    ///
-    /// The first AsyncResult to complete (successfully or with failure) wins.
-    /// Other results are discarded.
-    ///
-    /// # Example
-    /// ```java
-    /// AsyncResult<User, Error> fastest = AsyncResult.race(
-    ///     fetchFromCache(id),
-    ///     fetchFromDatabase(id),
-    ///     fetchFromReplica(id)
-    /// );
-    /// ```
-    ///
-    /// @param first The first contender.
-    /// @param others Additional contenders.
-    /// @return An AsyncResult completing with the fastest result.
+	///
+	/// The first AsyncResult to complete (successfully or with failure) wins.
+	/// Other results are discarded.
+	///
+	/// # Example
+	/// ```java
+	/// AsyncResult<User, Error> fastest = AsyncResult.race(
+	///     fetchFromCache(id),
+	///     fetchFromDatabase(id),
+	///     fetchFromReplica(id)
+	/// );
+	/// ```
+	///
+	/// @param first The first contender.
+	/// @param others Additional contenders.
+	/// @return An AsyncResult completing with the fastest result.
 	@Contract("_, _ -> new")
 	@SafeVarargs
 	static <T, E> @NonNull AsyncResult<T, E> race(@NonNull AsyncResult<T, E> first,
@@ -317,20 +334,20 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 	}
 
 	/// Delays the execution of an AsyncResult.
-    ///
-    /// Useful for retries with backoff or rate limiting.
-    ///
-    /// # Example
-    /// ```java
-    /// AsyncResult<User, Error> withBackoff = AsyncResult.delay(
-    ///     fetchUser(id),
-    ///     Duration.ofMillis(100 * attemptNumber)
-    /// );
-    /// ```
-    ///
-    /// @param asyncResult The AsyncResult to delay.
-    /// @param delay The duration to delay.
-    /// @return A delayed AsyncResult.
+	///
+	/// Useful for retries with backoff or rate limiting.
+	///
+	/// # Example
+	/// ```java
+	/// AsyncResult<User, Error> withBackoff = AsyncResult.delay(
+	///     fetchUser(id),
+	///     Duration.ofMillis(100 * attemptNumber)
+	/// );
+	/// ```
+	///
+	/// @param asyncResult The AsyncResult to delay.
+	/// @param delay The duration to delay.
+	/// @return A delayed AsyncResult.
 	@Contract("_, _ -> new")
 	static <T, E> @NonNull AsyncResult<T, E> delay(@NonNull AsyncResult<T, E> asyncResult, Duration delay) {
 		return switch (asyncResult) {
@@ -343,18 +360,18 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 	}
 
 	/// Transforms the success value when this completes.
-    ///
-    /// If this AsyncResult completes with Failure, the mapper is not invoked
-    /// and the Failure propagates unchanged.
-    ///
-    /// # Example
-    /// ```java
-    /// AsyncResult<String, Error> nameAsync = userAsync.map(User::name);
-    /// ```
-    ///
-    /// @param mapper Function to transform the success value.
-    /// @param <U> The new success type.
-    /// @return A new AsyncResult with the transformed type.
+	///
+	/// If this AsyncResult completes with Failure, the mapper is not invoked
+	/// and the Failure propagates unchanged.
+	///
+	/// # Example
+	/// ```java
+	/// AsyncResult<String, Error> nameAsync = userAsync.map(User::name);
+	/// ```
+	///
+	/// @param mapper Function to transform the success value.
+	/// @param <U> The new success type.
+	/// @return A new AsyncResult with the transformed type.
 	@Contract("_ -> new")
 	default <U> @NonNull AsyncResult<U, E> map(Function<T, U> mapper) {
 		return switch (this) {
@@ -364,20 +381,20 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 	}
 
 	/// Transforms the error when this completes with Failure.
-    ///
-    /// If this AsyncResult completes with Success, the mapper is not invoked.
-    /// Useful for translating error types between layers.
-    ///
-    /// # Example
-    /// ```java
-    /// AsyncResult<User, ApiError> apiResult = dbResult.mapError(
-    ///     dbErr -> new ApiError("Database error", dbErr.code())
-    /// );
-    /// ```
-    ///
-    /// @param mapper Function to transform the error.
-    /// @param <F> The new error type.
-    /// @return A new AsyncResult with the transformed error type.
+	///
+	/// If this AsyncResult completes with Success, the mapper is not invoked.
+	/// Useful for translating error types between layers.
+	///
+	/// # Example
+	/// ```java
+	/// AsyncResult<User, ApiError> apiResult = dbResult.mapError(
+	///     dbErr -> new ApiError("Database error", dbErr.code())
+	/// );
+	/// ```
+	///
+	/// @param mapper Function to transform the error.
+	/// @param <F> The new error type.
+	/// @return A new AsyncResult with the transformed error type.
 	@Contract("_ -> new")
 	default <F> @NonNull AsyncResult<T, F> mapError(Function<E, F> mapper) {
 		return switch (this) {
@@ -387,23 +404,23 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 	}
 
 	/// Maps both success and error types simultaneously.
-    ///
-    /// This is a convenience method that applies transformations to both
-    /// possible outcomes in a single operation.
-    ///
-    /// # Example
-    /// ```java
-    /// AsyncResult<UserDTO, ApiError> apiResult = dbResult.mapBoth(
-    ///     user -> new UserDTO(user.id(), user.name()),
-    ///     dbErr -> new ApiError("DB_ERROR", dbErr.message())
-    /// );
-    /// ```
-    ///
-    /// @param successMapper Function to transform the success value.
-    /// @param errorMapper Function to transform the error.
-    /// @param <U> The new success type.
-    /// @param <F> The new error type.
-    /// @return A new AsyncResult with both types transformed.
+	///
+	/// This is a convenience method that applies transformations to both
+	/// possible outcomes in a single operation.
+	///
+	/// # Example
+	/// ```java
+	/// AsyncResult<UserDTO, ApiError> apiResult = dbResult.mapBoth(
+	///     user -> new UserDTO(user.id(), user.name()),
+	///     dbErr -> new ApiError("DB_ERROR", dbErr.message())
+	/// );
+	/// ```
+	///
+	/// @param successMapper Function to transform the success value.
+	/// @param errorMapper Function to transform the error.
+	/// @param <U> The new success type.
+	/// @param <F> The new error type.
+	/// @return A new AsyncResult with both types transformed.
 	@Contract("_, _ -> new")
 	default <U, F> @NonNull AsyncResult<U, F> mapBoth(Function<T, U> successMapper, Function<E, F> errorMapper) {
 		return switch (this) {
@@ -414,20 +431,20 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 	}
 
 	/// Chains an async operation that itself returns an AsyncResult.
-    ///
-    /// This is the core sequencing operation. If this completes with Failure,
-    /// the chained operation is not executed and the Failure propagates.
-    ///
-    /// # Example
-    /// ```java
-    /// AsyncResult<Order, Error> orderAsync = userAsync
-    ///     .flatMap(user -> fetchCart(user.id()))  // returns AsyncResult<Cart, Error>
-    ///     .flatMap(cart -> createOrder(cart));    // returns AsyncResult<Order, Error>
-    /// ```
-    ///
-    /// @param mapper Function returning the next AsyncResult.
-    /// @param <U> The new success type.
-    /// @return A flattened AsyncResult.
+	///
+	/// This is the core sequencing operation. If this completes with Failure,
+	/// the chained operation is not executed and the Failure propagates.
+	///
+	/// # Example
+	/// ```java
+	/// AsyncResult<Order, Error> orderAsync = userAsync
+	///     .flatMap(user -> fetchCart(user.id()))  // returns AsyncResult<Cart, Error>
+	///     .flatMap(cart -> createOrder(cart));    // returns AsyncResult<Order, Error>
+	/// ```
+	///
+	/// @param mapper Function returning the next AsyncResult.
+	/// @param <U> The new success type.
+	/// @return A flattened AsyncResult.
 	@Contract("_ -> new")
 	default <U> @NonNull AsyncResult<U, E> flatMap(Function<T, AsyncResult<U, E>> mapper) {
 		return switch (this) {
@@ -443,23 +460,23 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 	}
 
 	/// Combines this AsyncResult with another using a combining function.
-    ///
-    /// Both AsyncResults execute in parallel. If either fails, the combination
-    /// fails with the first error encountered (fail-fast).
-    ///
-    /// # Example
-    /// ```java
-    /// AsyncResult<OrderSummary, Error> summaryAsync = userAsync.combine(
-    ///     cartAsync,
-    ///     (user, cart) -> new OrderSummary(user, cart)
-    /// );
-    /// ```
-    ///
-    /// @param other The other AsyncResult to combine with.
-    /// @param combiner Function merging both success values.
-    /// @param <U> The other success type.
-    /// @param <V> The combined success type.
-    /// @return An AsyncResult containing the combined value or first error.
+	///
+	/// Both AsyncResults execute in parallel. If either fails, the combination
+	/// fails with the first error encountered (fail-fast).
+	///
+	/// # Example
+	/// ```java
+	/// AsyncResult<OrderSummary, Error> summaryAsync = userAsync.combine(
+	///     cartAsync,
+	///     (user, cart) -> new OrderSummary(user, cart)
+	/// );
+	/// ```
+	///
+	/// @param other The other AsyncResult to combine with.
+	/// @param combiner Function merging both success values.
+	/// @param <U> The other success type.
+	/// @param <V> The combined success type.
+	/// @return An AsyncResult containing the combined value or first error.
 	@Contract("_, _ -> new")
 	default <U, V> @NonNull AsyncResult<V, E> combine(@NonNull AsyncResult<U, E> other, BiFunction<T, U, V> combiner) {
 		// Optimization: if both completed, combine immediately
@@ -484,19 +501,19 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 	}
 
 	/// Recovers from failure with a fallback value.
-    ///
-    /// If this completes with Failure, the recovery function is applied to
-    /// produce a success value. Success values pass through unchanged.
-    ///
-    /// # Example
-    /// ```java
-    /// AsyncResult<User, Error> userOrGuest = userAsync.recover(
-    ///     err -> User.guest()
-    /// );
-    /// ```
-    ///
-    /// @param recovery Function producing a fallback value from error.
-    /// @return An AsyncResult that never fails (unless recovery throws).
+	///
+	/// If this completes with Failure, the recovery function is applied to
+	/// produce a success value. Success values pass through unchanged.
+	///
+	/// # Example
+	/// ```java
+	/// AsyncResult<User, Error> userOrGuest = userAsync.recover(
+	///     err -> User.guest()
+	/// );
+	/// ```
+	///
+	/// @param recovery Function producing a fallback value from error.
+	/// @return An AsyncResult that never fails (unless recovery throws).
 	@Contract("_ -> new")
 	default @NonNull AsyncResult<T, E> recover(Function<E, T> recovery) {
 		return switch (this) {
@@ -506,18 +523,18 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 	}
 
 	/// Recovers from failure with another AsyncResult.
-    ///
-    /// Use when the recovery itself is async (e.g., fallback to cache).
-    ///
-    /// # Example
-    /// ```java
-    /// AsyncResult<User, Error> userAsync = primaryAsync.recoverWith(
-    ///     err -> cacheAsync.findById(id)
-    /// );
-    /// ```
-    ///
-    /// @param recovery Function producing a fallback AsyncResult.
-    /// @return The original or recovered AsyncResult.
+	///
+	/// Use when the recovery itself is async (e.g., fallback to cache).
+	///
+	/// # Example
+	/// ```java
+	/// AsyncResult<User, Error> userAsync = primaryAsync.recoverWith(
+	///     err -> cacheAsync.findById(id)
+	/// );
+	/// ```
+	///
+	/// @param recovery Function producing a fallback AsyncResult.
+	/// @return The original or recovered AsyncResult.
 	@Contract("_ -> new")
 	default @NonNull AsyncResult<T, E> recoverWith(Function<E, AsyncResult<T, E>> recovery) {
 		return switch (this) {
@@ -533,18 +550,18 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 	}
 
 	/// Executes a side effect on success without modifying the result.
-    ///
-    /// Useful for logging, metrics, or caching without breaking the chain.
-    ///
-    /// # Example
-    /// ```java
-    /// userAsync
-    ///     .peek(user -> log.info("Loaded user: {}", user.id()))
-    ///     .peek(user -> metrics.increment("user.loaded"));
-    /// ```
-    ///
-    /// @param action Consumer to execute on success.
-    /// @return This AsyncResult (fluent API).
+	///
+	/// Useful for logging, metrics, or caching without breaking the chain.
+	///
+	/// # Example
+	/// ```java
+	/// userAsync
+	///     .peek(user -> log.info("Loaded user: {}", user.id()))
+	///     .peek(user -> metrics.increment("user.loaded"));
+	/// ```
+	///
+	/// @param action Consumer to execute on success.
+	/// @return This AsyncResult (fluent API).
 	@Contract("_ -> new")
 	default @NonNull AsyncResult<T, E> peek(Consumer<T> action) {
 		return switch (this) {
@@ -554,16 +571,16 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 	}
 
 	/// Executes a side effect on failure without modifying the result.
-    ///
-    /// Useful for error logging or alerting.
-    ///
-    /// # Example
-    /// ```java
-    /// userAsync.peekFailure(err -> alertService.notify("User load failed", err));
-    /// ```
-    ///
-    /// @param action Consumer to execute on failure.
-    /// @return This AsyncResult (fluent API).
+	///
+	/// Useful for error logging or alerting.
+	///
+	/// # Example
+	/// ```java
+	/// userAsync.peekFailure(err -> alertService.notify("User load failed", err));
+	/// ```
+	///
+	/// @param action Consumer to execute on failure.
+	/// @return This AsyncResult (fluent API).
 	@Contract("_ -> new")
 	default @NonNull AsyncResult<T, E> peekFailure(Consumer<E> action) {
 		return switch (this) {
@@ -583,21 +600,21 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 	}
 
 	/// Filters the success value with a predicate.
-    ///
-    /// If the predicate returns false, the AsyncResult completes with the
-    /// supplied error. Failures pass through unchanged.
-    ///
-    /// # Example
-    /// ```java
-    /// AsyncResult<User, UserError> activeUser = userAsync.filter(
-    ///     User::isActive,
-    ///     () -> new UserError.Inactive(userId)
-    /// );
-    /// ```
-    ///
-    /// @param predicate Condition to test the success value.
-    /// @param errorSupplier Provides error if predicate fails.
-    /// @return An AsyncResult filtered by the predicate.
+	///
+	/// If the predicate returns false, the AsyncResult completes with the
+	/// supplied error. Failures pass through unchanged.
+	///
+	/// # Example
+	/// ```java
+	/// AsyncResult<User, UserError> activeUser = userAsync.filter(
+	///     User::isActive,
+	///     () -> new UserError.Inactive(userId)
+	/// );
+	/// ```
+	///
+	/// @param predicate Condition to test the success value.
+	/// @param errorSupplier Provides error if predicate fails.
+	/// @return An AsyncResult filtered by the predicate.
 	@Contract("_, _ -> new")
 	default @NonNull AsyncResult<T, E> filter(Predicate<T> predicate, Supplier<E> errorSupplier) {
 		return switch (this) {
@@ -615,47 +632,36 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 	}
 
 	/// Returns a new AsyncResult that times out after the specified duration.
-    ///
-    /// If the original future doesn't complete in time, it completes with
-    /// the supplied error.
-    ///
-    /// # Example
-    /// ```java
-    /// AsyncResult<User, Error> timed = userAsync.timeout(
-    ///     Duration.ofSeconds(5),
-    ///     () -> new Error.Timeout()
-    /// );
-    /// ```
-    ///
-    /// @param duration Maximum time to wait.
-    /// @param errorSupplier Provides timeout error.
-    /// @return A timeout-guarded AsyncResult.
+	///
+	/// If the original future doesn't complete in time, it completes with
+	/// the supplied error. Uses CompletableFuture's native orTimeout for
+	/// proper cancellation propagation.
+	///
+	/// # Example
+	/// ```java
+	/// AsyncResult<User, Error> timed = userAsync.timeout(
+	///     Duration.ofSeconds(5),
+	///     () -> new Error.Timeout()
+	/// );
+	/// ```
+	///
+	/// @param duration Maximum time to wait.
+	/// @param errorSupplier Provides timeout error.
+	/// @return A timeout-guarded AsyncResult.
 	@Contract("_, _ -> new")
 	default @NonNull AsyncResult<T, E> timeout(@NonNull Duration duration, Supplier<E> errorSupplier) {
 		return switch (this) {
-			case Completed<T, E> _ -> this; // Already done, no need to timeout
-			case Pending<T, E>(var future) -> {
-				final CompletableFuture<Result<T, E>> timeoutFuture = new CompletableFuture<>();
-
-				future.orTimeout(duration.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS)
-						.whenComplete((result, ex) -> {
-							if (ex != null) {
-								timeoutFuture.complete(Result.failure(errorSupplier.get()));
-							} else {
-								timeoutFuture.complete(result);
-							}
-						});
-
-				yield new Pending<>(timeoutFuture);
-			}
+			case Completed<T, E> _ -> this;
+			case Pending<T, E>(var future) -> new Pending<>(future.orTimeout(duration.toMillis(), TimeUnit.MILLISECONDS)
+					.exceptionally(ex -> Result.failure(errorSupplier.get())));
 		};
 	}
 
 	/// Converts to a plain CompletableFuture of Result.
-    ///
-    /// Use this when integrating with other async APIs or for final execution.
-    ///
-    /// @return The underlying future.
+	///
+	/// Use this when integrating with other async APIs or for final execution.
+	///
+	/// @return The underlying future.
 	@Contract(pure = true)
 	default CompletableFuture<Result<T, E>> toFuture() {
 		return switch (this) {
@@ -665,20 +671,20 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 	}
 
 	/// Blocks and awaits the result.
-    ///
-    /// # ⚠️ Warning
-    /// This blocks the calling thread. Use only at application boundaries
-    /// (e.g., in controllers) or for testing. Never call this in async
-    /// code without managing the blocking properly.
-    ///
-    /// @return The completed Result.
+	///
+	/// # ⚠️ Warning
+	/// This blocks the calling thread. Use only at application boundaries
+	/// (e.g., in controllers) or for testing. Never call this in async
+	/// code without managing the blocking properly.
+	///
+	/// @return The completed Result.
 	default Result<T, E> join() {
 		return this.toFuture().join();
 	}
 
 	/// Returns whether this AsyncResult has completed.
-    ///
-    /// @return true if completed (successfully or exceptionally).
+	///
+	/// @return true if completed (successfully or exceptionally).
 	default boolean isDone() {
 		return switch (this) {
 			case Completed<T, E> _ -> true;
@@ -687,10 +693,10 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 	}
 
 	/// Returns whether this AsyncResult completed with Failure.
-    ///
-    /// Only meaningful after completion. Returns false if not done or if successful.
-    ///
-    /// @return true if completed with Failure.
+	///
+	/// Only meaningful after completion. Returns false if not done or if successful.
+	///
+	/// @return true if completed with Failure.
 	default boolean isCompletedExceptionally() {
 		return switch (this) {
 			case Completed<T, E>(var result) -> result.isFailure();
@@ -698,60 +704,123 @@ public sealed interface AsyncResult<T, E> permits AsyncResult.Pending, AsyncResu
 		};
 	}
 
-	/// Retries this AsyncResult with a fixed number of attempts.
-    ///
-    /// If the AsyncResult fails, it is retried up to the specified number
-    /// of times with no delay between attempts.
-    ///
-    /// ⚠️ Warning: Immediate retries can overwhelm failing services.
-    /// Consider using [this.retryWithBackoff] for production code.
-    ///
-    /// # Example
-    /// ```java
-    /// AsyncResult<User, Error> resilient = userAsync.retry(3);
-    /// ```
-    ///
-    /// @param maxAttempts Maximum number of attempts (must be >= 1).
-    /// @return A retrying AsyncResult.
-	default AsyncResult<T, E> retry(int maxAttempts) {
-		if (maxAttempts <= 1) {
-			return this;
-		}
-		return this.recoverWith(err -> this.retry(maxAttempts - 1));
-	}
-
 	/// Retries with exponential backoff.
-    ///
-    /// # Example
-    /// ```java
-    /// AsyncResult<User, Error> resilient = userAsync.retryWithBackoff(
-    ///     3,                    // max attempts
-    ///     Duration.ofMillis(100) // initial delay
-    /// );
-    /// ```
-    ///
-    /// @param maxAttempts Maximum number of attempts.
-    /// @param initialDelay Initial delay, doubled each retry.
-    /// @return A retrying AsyncResult with backoff.
-	default AsyncResult<T, E> retryWithBackoff(int maxAttempts, java.time.Duration initialDelay) {
-		return this.retryWithBackoff(maxAttempts, initialDelay, 2.0);
+	///
+	/// # Example
+	/// ```java
+	/// AsyncResult<User, Error> resilient = AsyncResult.retryWithBackoff(
+	///     () -> fetchUser(id),           // Supplier<AsyncResult<T,E>> - fresh attempt each time
+	///     3,                              // max attempts
+	///     Duration.ofMillis(100)          // initial delay
+	/// );
+	/// ```
+	///
+	/// @param attempt Supplier providing a fresh AsyncResult for each attempt.
+	/// @param maxAttempts Maximum number of attempts.
+	/// @param initialDelay Initial delay, doubled each retry.
+	/// @return A retrying AsyncResult with backoff.
+	@Contract("_, _, _ -> new")
+	static <T, E> @NonNull AsyncResult<T, E> retryWithBackoff(@NonNull Supplier<AsyncResult<T, E>> attempt,
+			int maxAttempts, @NonNull Duration initialDelay) {
+		return retryWithBackoff(attempt, maxAttempts, initialDelay, 2.0);
 	}
 
 	/// Retries with configurable exponential backoff.
-    ///
-    /// @param maxAttempts Maximum number of attempts.
-    /// @param initialDelay Initial delay.
-    /// @param multiplier Factor to multiply delay by each attempt.
-    /// @return A retrying AsyncResult with backoff.
-	default AsyncResult<T, E> retryWithBackoff(int maxAttempts, java.time.Duration initialDelay, double multiplier) {
+	///
+	/// @param attempt Supplier providing a fresh AsyncResult for each attempt.
+	/// @param maxAttempts Maximum number of attempts.
+	/// @param initialDelay Initial delay.
+	/// @param multiplier Factor to multiply delay by each attempt.
+	/// @return A retrying AsyncResult with backoff.
+	@Contract("_, _, _, _ -> new")
+	static <T, E> @NonNull AsyncResult<T, E> retryWithBackoff(@NonNull Supplier<AsyncResult<T, E>> attempt,
+			int maxAttempts, @NonNull Duration initialDelay, double multiplier) {
+
 		if (maxAttempts <= 1) {
-			return this;
+			return attempt.get();
 		}
-		return this.recoverWith(_ -> {
-			final AsyncResult<T, E> retried = delay(this, initialDelay);
-			final java.time.Duration nextDelay = java.time.Duration
-					.ofMillis((long) (initialDelay.toMillis() * multiplier));
-			return retried.retryWithBackoff(maxAttempts - 1, nextDelay, multiplier);
-		});
+
+		final AsyncResult<T, E> firstAttempt = attempt.get();
+
+		return switch (firstAttempt) {
+			case Completed<T, E>(var result) -> switch (result) {
+				case Result.Success<T, E> _ -> firstAttempt;
+				case Result.Failure<T, E> _ -> delay(
+						retryWithBackoff(attempt, maxAttempts - 1,
+								Duration.ofMillis((long) (initialDelay.toMillis() * multiplier)), multiplier),
+						initialDelay);
+			};
+			case Pending<T, E>(var future) -> new Pending<>(future.thenCompose(result -> switch (result) {
+				case Result.Success<T, E> _ -> CompletableFuture.completedFuture(result);
+				case Result.Failure<T, E> _ -> delay(
+						retryWithBackoff(attempt, maxAttempts - 1,
+								Duration.ofMillis((long) (initialDelay.toMillis() * multiplier)), multiplier),
+						initialDelay).toFuture();
+			}));
+		};
+	}
+
+	/// Retries with fixed attempts (also fixed to use Supplier).
+	///
+	/// @param attempt Supplier providing a fresh AsyncResult for each attempt.
+	/// @param maxAttempts Maximum number of attempts.
+	/// @return A retrying AsyncResult.
+	@Contract("_, _ -> new")
+	static <T, E> @NonNull AsyncResult<T, E> retry(@NonNull Supplier<AsyncResult<T, E>> attempt, int maxAttempts) {
+
+		if (maxAttempts <= 1) {
+			return attempt.get();
+		}
+
+		final AsyncResult<T, E> first = attempt.get();
+		return switch (first) {
+			case Completed<T, E>(var result) -> switch (result) {
+				case Result.Success<T, E> _ -> first;
+				case Result.Failure<T, E> _ -> retry(attempt, maxAttempts - 1);
+			};
+			case Pending<T, E>(var future) -> new Pending<>(future.thenCompose(result -> switch (result) {
+				case Result.Success<T, E> _ -> CompletableFuture.completedFuture(result);
+				case Result.Failure<T, E> _ -> retry(attempt, maxAttempts - 1).toFuture();
+			}));
+		};
+	}
+
+	/// Attempts to cancel the underlying asynchronous computation.
+	///
+	/// If this AsyncResult is already completed, this method has no effect.
+	/// If it is pending, the underlying CompletableFuture is canceled with
+	/// the specified interruption policy.
+	///
+	/// # Propagation
+	/// Cancellation is best-effort. Chained operations (map, flatMap, etc.)
+	/// on a canceled AsyncResult will complete with CancellationException.
+	///
+	/// # Example
+	/// ```java
+	/// AsyncResult<Data, Error> fetch = fetchData();
+	///
+	/// // Later, maybe in a shutdown hook or timeout handler:
+	/// fetch.cancel(true); // interrupt if running
+	/// ```
+	///
+	/// @param mayInterruptIfRunning Whether the thread executing the task
+	///                              should be interrupted.
+	/// @return true if the task was canceled (or already complete);
+	///         false if the task could not be canceled.
+	default boolean cancel(boolean mayInterruptIfRunning) {
+		return switch (this) {
+			case Completed<T, E> _ -> true; // Already done, "canceled" vacuously
+			case Pending<T, E>(var future) -> future.cancel(mayInterruptIfRunning);
+		};
+	}
+
+	/// Returns true if this AsyncResult was canceled before completing normally.
+	///
+	/// @return true if canceled.
+	default boolean isCancelled() {
+		return switch (this) {
+			case Completed<T, E> _ -> false;
+			case Pending<T, E>(var future) -> future.isCancelled();
+		};
 	}
 }

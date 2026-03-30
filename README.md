@@ -147,6 +147,39 @@ var response = userService.findById(42)
     );
 ```
 
+## Real-World Recipe: Load User with Orders
+
+This example demonstrates a typical service layer pattern - loading a user, fetching their orders in parallel, and combining the results:
+
+```java
+public AsyncResult<UserProfile, UserError> getUserWithOrders(Long userId) {
+    // Start with fetching user and preferences in parallel
+    return AsyncResult.sequence(List.of(
+            userService.findByIdAsync(userId),
+            preferencesService.getPreferencesAsync(userId)
+        ))
+        .combine(
+            orderService.getRecentOrdersAsync(userId),
+            (results, orders) -> {
+                final User user = results.get(0);
+                final UserPreferences prefs = results.get(1);
+                return new UserProfile(user, prefs, orders);
+            }
+        )
+        .filter(
+            profile -> !profile.orders().isEmpty(),
+            () -> new UserError.NoOrders(userId)
+        )
+        .peekFailure(err -> log.error("Failed to load profile for user {}: {}", userId, err));
+}
+```
+
+### Key Patterns Demonstrated:
+- **`sequence()`** - Parallel execution with fail-fast
+- **`combine()`** - Merge independent results
+- **`filter()`** - Validate business rules
+- **`peekFailure()`** - Logging without breaking the chain
+
 ## API Reference
 
 ### Result<T, E>
@@ -277,7 +310,7 @@ result
 // Collect results from a stream (short-circuit on first failure)
 Stream<Result<User, UserError>> results = userIds.stream()
     .map(repository::findById);
-Result<List<User>, UserError> allUsers = Result.collect(results);
+Result<List<User>, UserError> allUsers = Result.collect(this.results);
 
 // Flatten nested Results
 Result<User, UserError> flat = Result.flatten(
@@ -350,7 +383,10 @@ AsyncResult<User, ApiError> apiAsync = userAsync.mapError(
 List<AsyncResult<Product, ShopError>> fetches = productIds.stream()
     .map(this::fetchProduct)
     .toList();
-AsyncResult<List<Product>, ShopError> allProducts = AsyncResult.collectAll(fetches);
+AsyncResult<List<Product>, ShopError> allProducts = AsyncResult.collectAll(this.fetches);
+
+// Semantic alias - clearer when sequencing operations
+AsyncResult<List<Product>, ShopError> sequenced = AsyncResult.sequence(this.fetches);
 
 // Race multiple async results (first to complete wins)
 AsyncResult<User, UserError> fastest = AsyncResult.race(
@@ -369,17 +405,19 @@ AsyncResult<User, UserError> timed = userAsync.timeout(
     () -> new UserError.DatabaseError("Request timeout")
 );
 
-// Retry with fixed attempts (no delay)
-AsyncResult<User, UserError> retry3 = userAsync.retry(3);
+// Retry with fixed attempts (supply fresh AsyncResult each time)
+AsyncResult<User, UserError> retry3 = AsyncResult.retry(() -> fetchUser(id), 3);
 
 // Retry with exponential backoff
-AsyncResult<User, UserError> resilient = userAsync.retryWithBackoff(
-    3,                           // max attempts
-    Duration.ofMillis(100)       // initial delay, doubled each retry
+AsyncResult<User, UserError> resilient = AsyncResult.retryWithBackoff(
+    () -> fetchUser(id),           // Supplier: fresh attempt each time
+    3,                            // max attempts
+    Duration.ofMillis(100)        // initial delay, doubled each retry
 );
 
 // Retry with custom backoff multiplier
-AsyncResult<User, UserError> custom = userAsync.retryWithBackoff(
+AsyncResult<User, UserError> custom = AsyncResult.retryWithBackoff(
+    () -> fetchUser(id),
     5,
     Duration.ofMillis(50),
     3.0  // triple the delay each time
@@ -405,6 +443,15 @@ if (userAsync.isDone()) {
 
 // Convert to CompletableFuture
 CompletableFuture<Result<User, UserError>> future = userAsync.toFuture();
+
+// Cancellation support
+boolean cancelled = userAsync.cancel(true);  // Attempt to cancel running operation
+if (userAsync.isCancelled()) {
+    // Operation was cancelled
+}
+
+// Note: Cancellation is best-effort. Chained operations (map, flatMap, etc.)
+// will complete with CancellationException if upstream is cancelled.
 ```
 
 ### Validator<T>
@@ -522,7 +569,7 @@ Function<Exception, UserError> errorRouter = ErrorRouter
 // Invoke in Result.attempt()
 Result<User, UserError> result = Result.attempt(
     () -> repository.save(user),
-    errorRouter
+    this.errorRouter
 );
 ```
 
@@ -545,6 +592,10 @@ router.mapWithEffect(
     (ex, error) -> alerting.notifyCritical("Database error", ex),
     ex -> new UserError.DatabaseError(ex.getMessage())
 );
+
+// Freeze for concurrent use (enables O(1) lookup caching)
+// Recommended for high-throughput scenarios - call after configuration
+router.freeze();
 ```
 
 #### Introspection
@@ -586,12 +637,12 @@ public sealed interface UserFailure extends BaseFailure {
     record NotFound(Long userId) implements UserFailure {
         @Override
         public String getMessage() {
-            return "User " + userId + " not found";
+            return "User " + this.userId + " not found";
         }
 
         @Override
         public Map<String, Object> getExtensions() {
-            return Map.of("userId", userId);
+            return Map.of("userId", this.userId);
         }
     }
 
@@ -606,7 +657,7 @@ public sealed interface UserFailure extends BaseFailure {
 
         @Override
         public Optional<ProblemDetail> toProblemDetail(HttpServletRequest request) {
-            return Optional.of(this.createValidationError(errors));
+            return Optional.of(this.createValidationError(this.errors));
         }
     }
 
@@ -614,14 +665,14 @@ public sealed interface UserFailure extends BaseFailure {
     record EmailExists(String email) implements UserFailure, HttpFailure {
         @Override
         public String getMessage() {
-            return "Email " + email + " is already in use";
+            return "Email " + this.email + " is already in use";
         }
 
         @Override
         public Optional<ProblemDetail> toProblemDetail(HttpServletRequest request) {
             return Optional.of(this.createConflictError(
                 "Email already registered",
-                email
+                this.email
             ));
         }
     }
@@ -641,7 +692,7 @@ public class UserController {
 
     @GetMapping("/{id}")
     public Result<UserDTO, UserFailure> getUser(@PathVariable Long id) {
-        return userService.findById(id)
+        return this.userService.findById(id)
             .map(user -> new UserDTO(user.getId(), user.getEmail()));
     }
 
@@ -652,7 +703,7 @@ public class UserController {
             .matches(CreateUserRequest::email, ".*@.*", "email", "Invalid email")
             .result()
             .mapError(errors -> new UserFailure.ValidationFailed(errors))
-            .flatMap(validReq -> userService.create(validReq))
+            .flatMap(validReq -> this.userService.create(validReq))
             .map(user -> new UserDTO(user.getId(), user.getEmail()));
     }
 
@@ -661,8 +712,8 @@ public class UserController {
         @PathVariable Long id,
         @RequestBody UpdateUserRequest req
     ) {
-        return userService.findByIdAsync(id)
-            .flatMap(user -> userService.validateAndUpdateAsync(user, req))
+        return this.userService.findByIdAsync(id)
+            .flatMap(user -> this.userService.validateAndUpdateAsync(user, req))
             .map(user -> new UserDTO(user.getId(), user.getEmail()));
     }
 }

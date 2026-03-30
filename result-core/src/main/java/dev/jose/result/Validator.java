@@ -3,286 +3,352 @@ package dev.jose.result;
 import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
-/// A simple validator utility for validating objects and collecting errors.
-/// @param <T> The type of the object to validate.
-public record Validator<T>(T target, Map<String, String> errors) {
+/// A **type-safe, immutable** validator that accumulates errors into a generic error type.
+///
+/// Unlike validators that lock you into `String` or `List<String>` errors, this class
+/// allows you to specify your own error representation via the type parameter `E`.
+/// This enables rich error types with codes, severity levels, i18n keys,
+/// or any structure your application requires.
+///
+/// ## Basic Usage
+///
+/// ```java
+/// record ValidationError(String code, String message, Severity severity) {}
+///
+/// var result = Validator.<User, ValidationError>of(user)
+///     .validate(u -> u.age() >= 18, "age",
+///         new ValidationError("AGE_MIN", "Must be 18+", Severity.ERROR))
+///     .validate(u -> u.email().contains("@"), "email",
+///         new ValidationError("EMAIL_FORMAT", "Invalid email", Severity.ERROR))
+///     .result();
+/// ```
+///
+/// ## Immutable Design
+///
+/// Every validation method returns a **new** `Validator` instance — the original
+/// is never modified. This makes all instances safe to share across threads and
+/// enables composable, branching validation pipelines with no defensive copying
+/// required at the call site.
+///
+/// ## Error Collection
+///
+/// Errors are stored in a `Map<String, E>` keyed by field name. Use [#result()]
+/// to obtain a `Result` wrapping the validated target or the error map, or
+/// [#resultOr(Function)] to transform the error map into a custom type.
+///
+/// @param <T> the type of object being validated
+/// @param <E> the error type produced by failed validations
+/// @see Result
+/// @author Jose
+/// @since 1.0.0
+public final class Validator<T, E> {
 
-	/// Creates a new Validator for the given target object.
-    ///
-    /// @param target The object to validate.
-    /// @return A new Validator instance with no errors.
-	@Contract("_ -> new")
-	public static <T> @NonNull Validator<T> of(T target) {
-		return new Validator<>(target, Map.of());
-	}
+	private final T target;
+	private final Map<String, E> errors;
 
-	/// Composes multiple validation functions into a single validator.
-    ///
-    /// # Example
-    /// ```java
-  /// Function<Validator<User>, Validator<User>> emailValidation =
-  ///     v -> v.required(User::email, "email")
-  ///          .validate(u -> u.email().contains("@"), "email", "Invalid format");
+	/// Private constructor. Use [#of(Object)] to create instances.
   ///
-  /// Validator.compose(user, emailValidation, ageValidation);
-  /// ```
-    ///
-    /// @param target      The object to validate.
-    /// @param validations Variable number of validation functions.
-    /// @return The final Validator after applying all validations.
-	@SafeVarargs
-	public static <T> Validator<T> compose(T target, UnaryOperator<Validator<T>> @NonNull... validations) {
-		Validator<T> validator = of(target);
-		for (final var validation : validations) {
-			validator = validation.apply(validator);
-		}
-		return validator;
+  /// @param target the object being validated
+  /// @param errors the accumulated errors — ownership is transferred to this instance
+	private Validator(T target, Map<String, E> errors) {
+		this.target = target;
+		this.errors = errors;
 	}
 
-	/// Validates the target object against the given condition.
-    ///
-    /// If the condition fails, an error message is added for the specified field.
-    ///
-    /// @param condition The predicate to test the target object.
-    /// @param field     The field name associated with the error.
-    /// @param message   The error message to add if the condition fails.
-    /// @return A new Validator instance with the potential error added.
-	public Validator<T> validate(@NonNull Predicate<T> condition, String field, String message) {
-		if (!condition.test(this.target)) {
-			return this.withError(field, message);
-		}
-		return this;
+	/// Creates a new, empty validator for the given target.
+  ///
+  /// This is the **entry point** for all validation operations.
+  ///
+  /// ```java
+	/// var validator = Validator.<User, MyError>of(user);
+	/// ```
+  ///
+  /// @param target the object to validate
+  /// @param <T>    the target type
+  /// @param <E>    the error type
+  /// @return a new, empty validator for the target
+	@Contract("_ -> new")
+	public static <T, E> @NonNull Validator<T, E> of(T target) {
+		return new Validator<>(target, new HashMap<>());
 	}
 
-	/// Conditionally applies validation logic.
-    ///
-    /// Only runs the validation function if the condition is met.
-    ///
-    /// # Example
-    /// ```java
-  /// validator.validateIf(
-  ///     user -> user.isPremium(),
-  ///     v -> v.nonNull(User::billingAddress, "billingAddress")
-  /// );
-  /// ```
-    ///
-    /// @param condition The condition to test.
-    /// @param validation The validation to apply if condition is true.
-    /// @return The validator after potentially applying the validation.
-	public Validator<T> validateIf(@NonNull Predicate<T> condition, UnaryOperator<Validator<T>> validation) {
+	/// Returns a new validator with the given field-error pair added to the error map.
+  ///
+  /// This is the single mutation point for the entire class. All `validate*` methods
+  /// delegate here, guaranteeing that every state transition produces a fresh instance.
+  ///
+  /// @param field the field name to associate the error with
+  /// @param error the error value
+  /// @return a new validator with the error appended
+	@Contract("_, _ -> new")
+	private @NonNull Validator<T, E> withError(@NonNull String field, E error) {
+		final var next = new HashMap<>(this.errors);
+		next.put(field, error);
+		return new Validator<>(this.target, next);
+	}
+
+	/// Adds a validation rule with a **lazy** error supplier.
+  ///
+  /// The error is only computed when the predicate fails. Prefer this overload
+  /// when error construction is expensive or has side effects.
+  ///
+  /// ```java
+	/// validator.validate(
+	///     u -> u.age() >= 18,
+	///     "age",
+	///     () -> new ValidationError("AGE_MIN", "Must be 18+", Severity.ERROR)
+	/// );
+	/// ```
+  ///
+  /// @param condition      the predicate to test against the target
+  /// @param field          the field name for error reporting
+  /// @param errorSupplier  supplier invoked only when validation fails
+  /// @return `this` if the predicate passes, otherwise a new validator with the error recorded
+  /// @throws NullPointerException if any parameter is null
+	@Contract("_, _, _ -> new")
+	public @NonNull Validator<T, E> validate(@NonNull Predicate<T> condition, @NonNull String field,
+			@NonNull Supplier<E> errorSupplier) {
+		return condition.test(this.target) ? this : this.withError(field, errorSupplier.get());
+	}
+
+	/// Adds a validation rule with an **eager** error value.
+  ///
+  /// The error is evaluated before the predicate is tested. Use
+  /// [#validate(Predicate, String, Supplier)] instead when error construction
+  /// is expensive.
+  ///
+  /// ```java
+	/// validator.validate(
+	///     u -> u.age() >= 18,
+	///     "age",
+	///     new ValidationError("AGE_MIN", "Must be 18+", Severity.ERROR)
+	/// );
+	/// ```
+  ///
+  /// @param condition the predicate to test against the target
+  /// @param field     the field name for error reporting
+  /// @param error     the error to record if validation fails
+  /// @return `this` if the predicate passes, otherwise a new validator with the error recorded
+  /// @throws NullPointerException if `condition` or `field` is null
+	@Contract("_, _, _ -> new")
+	public @NonNull Validator<T, E> validate(@NonNull Predicate<T> condition, @NonNull String field, E error) {
+		return condition.test(this.target) ? this : this.withError(field, error);
+	}
+
+	/// Conditionally applies a block of validations.
+  ///
+  /// The `validation` function is only invoked when `condition` returns `true`,
+  /// enabling context-dependent rules without breaking the fluent chain.
+  ///
+  /// ```java
+	/// validator.validateIf(
+	///     u -> u.type() == UserType.PREMIUM,
+	///     v -> v.validate(u -> u.subscription() != null, "subscription", MISSING_SUB)
+	/// );
+	/// ```
+  ///
+  /// @param condition  the guard predicate
+  /// @param validation the validation block applied when the condition holds
+  /// @return the result of `validation` if the condition is true, otherwise `this`
+  /// @throws NullPointerException if any parameter is null
+	@Contract("_, _ -> new")
+	public @NonNull Validator<T, E> validateIf(@NonNull Predicate<T> condition,
+			@NonNull UnaryOperator<Validator<T, E>> validation) {
 		return condition.test(this.target) ? validation.apply(this) : this;
 	}
 
-	/// Validates a cross-field constraint.
-    ///
-    /// If the condition fails, the same error message is added to all specified fields.
-    ///
-    /// # Example
-    /// ```java
-  /// validator.validateFields(
-  ///     user -> user.password().equals(user.confirmPassword()),
-  ///     "Passwords must match",
-  ///     "password", "confirmPassword"
-  /// );
-  /// ```
-    ///
-    /// @param condition The predicate to test.
-    /// @param message   The error message.
-    /// @param fields    The field names to associate with the error.
-    /// @return A new Validator with potential errors added.
-	public Validator<T> validateFields(@NonNull Predicate<T> condition, String message, String... fields) {
-		if (!condition.test(this.target)) {
-			final Map<String, String> newErrors = new HashMap<>(this.errors);
-			for (final String field : fields) {
-				newErrors.put(field, message);
-			}
-			return new Validator<>(this.target, newErrors);
-		}
-		return this;
+	/// Validates that a field extracted from the target is non-null.
+  ///
+  /// ```java
+	/// validator.nonNull(User::email, "email", MISSING_EMAIL);
+	/// ```
+  ///
+  /// @param extractor extracts the field value from the target
+  /// @param field     the field name for error reporting
+  /// @param error     the error to record if the field is null
+  /// @param <U>       the field type
+  /// @return `this` if the field is non-null, otherwise a new validator with the error recorded
+  /// @throws NullPointerException if `extractor` or `field` is null
+	@Contract("_, _, _ -> new")
+	public <U> @NonNull Validator<T, E> nonNull(@NonNull Function<T, U> extractor, @NonNull String field, E error) {
+		return this.validate(t -> extractor.apply(t) != null, field, error);
 	}
 
-	/// Validates an Optional field if present.
-    ///
-    /// If the Optional is empty, no validation is performed.
-    ///
-    /// # Example
-    /// ```java
-  /// validator.validateOptional(
-  ///     User::middleName,
-  ///     name -> name.length() > 1,
-  ///     "middleName",
-  ///     "Middle name must be at least 2 characters"
-  /// );
-  /// ```
-    ///
-    /// @param extractor Function to extract the Optional field.
-    /// @param condition Predicate to test the unwrapped value.
-    /// @param field     The field name.
-    /// @param message   The error message.
-    /// @return A new Validator with potential error added.
-	public <U> Validator<T> validateOptional(@NonNull Function<T, Optional<U>> extractor, Predicate<U> condition,
-			String field, String message) {
-		final Optional<U> value = extractor.apply(this.target);
-		if (value.isPresent() && !condition.test(value.get())) {
-			return this.withError(field, message);
-		}
-		return this;
+	/// Validates that a string field matches a regex pattern.
+  ///
+  /// The field is also required to be non-null; a null value is treated as a failure.
+  ///
+  /// ```java
+	/// validator.matches(
+	///     User::email,
+	///     "^[A-Za-z0-9+_.-]+@(.+)$",
+	///     "email",
+	///     INVALID_EMAIL_FORMAT
+	/// );
+	/// ```
+  ///
+  /// @param extractor extracts the string field from the target
+  /// @param pattern   the regex pattern to test
+  /// @param field     the field name for error reporting
+  /// @param error     the error to record if validation fails
+  /// @return `this` if the pattern matches, otherwise a new validator with the error recorded
+  /// @throws NullPointerException if any parameter is null
+	@Contract("_, _, _, _ -> new")
+	public @NonNull Validator<T, E> matches(@NonNull Function<T, String> extractor, @NonNull String pattern,
+			@NonNull String field, E error) {
+		return this.validate(t -> {
+			final var value = extractor.apply(t);
+			return value != null && value.matches(pattern);
+		}, field, error);
 	}
 
-	/// Validates that the extracted string field is not null or blank.
-    ///
-    /// If the field is null or blank, an error message is added for the specified field.
-    ///
-    /// @param extractor A function to extract the string field from the target object.
-    /// @param field     The field name associated with the error.
-    /// @return A new Validator instance with the potential error added.
-	public Validator<T> required(@NonNull Function<T, String> extractor, String field) {
-		final String value = extractor.apply(this.target);
-		if (value == null || value.isBlank()) {
-			return this.withError(field, "Field is required");
-		}
-		return this;
+	/// Validates that a numeric field falls within an inclusive range.
+  ///
+  /// A null value is treated as a failure.
+  ///
+  /// ```java
+	/// validator.range(User::age, 0, 150, "age", INVALID_AGE);
+	/// ```
+  ///
+  /// @param extractor extracts the numeric field from the target
+  /// @param min       the minimum value (inclusive)
+  /// @param max       the maximum value (inclusive)
+  /// @param field     the field name for error reporting
+  /// @param error     the error to record if validation fails
+  /// @param <N>       a numeric type extending [Number]
+  /// @return `this` if the value is in range, otherwise a new validator with the error recorded
+  /// @throws NullPointerException if any parameter is null
+	@Contract("_, _, _, _, _ -> new")
+	public <N extends Number> @NonNull Validator<T, E> range(@NonNull Function<T, N> extractor, double min, double max,
+			@NonNull String field, E error) {
+		return this.validate(t -> {
+			final var value = extractor.apply(t);
+			if (value == null)
+				return false;
+			final double d = value.doubleValue();
+			return d >= min && d <= max;
+		}, field, error);
 	}
 
-	/// Validates that the extracted string field matches the given pattern.
-    ///
-    /// @param extractor A function to extract the string field.
-    /// @param pattern   The regex pattern to match.
-    /// @param field     The field name.
-    /// @param message   The error message if pattern doesn't match.
-    /// @return A new Validator instance with the potential error added.
-	public Validator<T> matches(@NonNull Function<T, String> extractor, String pattern, String field, String message) {
-		final String value = extractor.apply(this.target);
-		if (value != null && !value.matches(pattern)) {
-			return this.withError(field, message);
-		}
-		return this;
-	}
-
-	/// Validates that the extracted field is not null.
-    ///
-    /// If the field is null, an error message is added for the specified field.
-    ///
-    /// @param extractor A function to extract the field from the target object.
-    /// @param field     The field name associated with the error.
-    /// @return A new Validator instance with the potential error added.
-	public Validator<T> nonNull(@NonNull Function<T, Object> extractor, String field) {
-		final Object value = extractor.apply(this.target);
-		if (value == null) {
-			return this.withError(field, "Field must not be null");
-		}
-		return this;
-	}
-
-	/// Validates that the extracted numeric field is positive.
-    ///
-    /// If the field is null or not positive, an error message is added for the specified field.
-    ///
-    /// @param extractor A function to extract the numeric field from the target object.
-    /// @param field     The field name associated with the error.
-    /// @return A new Validator instance with the potential error added.
-	public Validator<T> positive(@NonNull Function<T, Number> extractor, String field) {
-		final Number value = extractor.apply(this.target);
-		if (value == null || value.doubleValue() <= 0) {
-			return this.withError(field, "Must be positive");
-		}
-		return this;
-	}
-
-	/// Validates that the extracted numeric field is within a range.
-    ///
-    /// @param extractor A function to extract the numeric field.
-    /// @param min       Minimum value (inclusive).
-    /// @param max       Maximum value (inclusive).
-    /// @param field     The field name.
-    /// @return A new Validator instance with the potential error added.
-	public Validator<T> range(@NonNull Function<T, Number> extractor, double min, double max, String field) {
-		final Number value = extractor.apply(this.target);
-		if (value != null) {
-			final double val = value.doubleValue();
-			if (val < min || val > max) {
-				return this.withError(field, "Must be between " + min + " and " + max);
-			}
-		}
-		return this;
-	}
-
-	/// Validates that the extracted string field's length is within bounds.
-    ///
-    /// @param extractor A function to extract the string field.
-    /// @param min       Minimum length (inclusive).
-    /// @param max       Maximum length (inclusive).
-    /// @param field     The field name.
-    /// @return A new Validator instance with the potential error added.
-	public Validator<T> length(@NonNull Function<T, String> extractor, int min, int max, String field) {
-		final String value = extractor.apply(this.target);
-		if (value != null) {
+	/// Validates that a string field's length falls within inclusive bounds.
+  ///
+  /// A null value is treated as a failure.
+  ///
+  /// ```java
+	/// validator.length(User::username, 3, 20, "username", USERNAME_LENGTH);
+	/// ```
+  ///
+  /// @param extractor extracts the string field from the target
+  /// @param min       the minimum length (inclusive)
+  /// @param max       the maximum length (inclusive)
+  /// @param field     the field name for error reporting
+  /// @param error     the error to record if validation fails
+  /// @return `this` if the length is in bounds, otherwise a new validator with the error recorded
+  /// @throws NullPointerException if any parameter is null
+	@Contract("_, _, _, _, _ -> new")
+	public @NonNull Validator<T, E> length(@NonNull Function<T, String> extractor, int min, int max,
+			@NonNull String field, E error) {
+		return this.validate(t -> {
+			final var value = extractor.apply(t);
+			if (value == null)
+				return false;
 			final int len = value.length();
-			if (len < min || len > max) {
-				return this.withError(field, "Length must be between " + min + " and " + max);
-			}
-		}
-		return this;
+			return len >= min && len <= max;
+		}, field, error);
 	}
 
-	/// Returns the validation result as a standard Result.
-    ///
-    /// If there are no errors, returns a successful Result containing the target object.
-    /// If there are errors, returns a failure Result containing the error map.
-    ///
-    /// @return A Result representing the outcome of the validation.
-	public Result<T, Map<String, String>> result() {
-		return this.errors.isEmpty() ? Result.success(this.target) : Result.failure(this.errors);
+	/// Returns the validation result as a [Result].
+  ///
+  /// - **No errors** → `Result.success(target)`
+  /// - **Errors present** → `Result.failure(errors)` with an **unmodifiable** `Map<String, E>`
+  ///
+  /// ```java
+	/// Result<User, Map<String, ValidationError>> result = validator.result();
+	/// ```
+  ///
+  /// @return a `Result` containing either the valid target or the accumulated error map
+	@Contract(" -> new")
+	public @NonNull Result<T, Map<String, E>> result() {
+		return this.errors.isEmpty() ? Result.success(this.target) : Result.failure(Map.copyOf(this.errors));
 	}
 
-	/// Returns the validation result with a custom error type.
-    ///
-    /// This is the recommended method as it allows type-safe error handling.
-    ///
-    /// # Example
-    /// ```java
-  /// Result<User, ValidationError> result = validator
-  ///     .resultOr(ValidationError.FieldErrors::new);
-  /// ```
-    ///
-    /// @param errorMapper Function to convert the error map to your error type.
-    /// @return A Result with your custom error type.
-	public <E> Result<T, E> resultOr(Function<Map<String, String>, E> errorMapper) {
-		return this.errors.isEmpty() ? Result.success(this.target) : Result.failure(errorMapper.apply(this.errors));
+	/// Returns the validation result with the error map transformed by a custom mapper.
+  ///
+  /// Use this when you want to collapse the error map into a single object
+  /// or a flat list before handing it off to callers.
+  ///
+  /// ```java
+	/// Result<User, ValidationErrors> result = validator.resultOr(
+	///     errors -> new ValidationErrors(errors.values())
+	/// );
+	/// ```
+  ///
+  /// @param errorMapper transforms the `Map<String, E>` into a custom error type
+  /// @param <F>         the final error type
+  /// @return a `Result` wrapping either the valid target or the mapped error
+  /// @throws NullPointerException if `errorMapper` is null
+	@Contract("_ -> new")
+	public <F> @NonNull Result<T, F> resultOr(@NonNull Function<Map<String, E>, F> errorMapper) {
+		return this.errors.isEmpty()
+				? Result.success(this.target)
+				: Result.failure(errorMapper.apply(Map.copyOf(this.errors)));
 	}
 
-	/// Checks if the validator has any errors.
-    ///
-    /// @return true if there are validation errors, false otherwise.
+	/// Returns `true` if at least one validation has failed.
+  ///
+  /// @return `true` when the error map is non-empty
 	@Contract(pure = true)
 	public boolean hasErrors() {
 		return !this.errors.isEmpty();
 	}
 
-	/// Gets the number of validation errors.
-    ///
-    /// @return The count of errors.
+	/// Returns the number of accumulated validation errors.
+  ///
+  /// @return the error count
 	@Contract(pure = true)
 	public int errorCount() {
 		return this.errors.size();
 	}
 
-	/// Internal helper to create a new Validator with an additional error.
-    ///
-    /// @param field   The field name.
-    /// @param message The error message.
-    /// @return A new Validator instance.
-	@Contract("_, _ -> new")
-	private @NonNull Validator<T> withError(String field, String message) {
-		final Map<String, String> newErrors = new HashMap<>(this.errors);
-		newErrors.put(field, message);
-		return new Validator<>(this.target, newErrors);
+	/// Returns an unmodifiable view of the current error map.
+  ///
+  /// @return the error map; never null, may be empty
+	@Contract(pure = true)
+	public @NonNull Map<String, E> errors() {
+		return Collections.unmodifiableMap(this.errors);
+	}
+
+	/// Applies a sequence of validation functions to a target in a single expression.
+  ///
+  /// Equivalent to chaining calls manually, but useful when the validations are
+  /// defined elsewhere or passed as arguments.
+  ///
+  /// ```java
+	/// Validator.compose(user,
+	///     v -> v.nonNull(User::email, "email", MISSING),
+	///     v -> v.length(User::username, 3, 20, "username", LENGTH),
+	///     v -> v.range(User::age, 0, 150, "age", INVALID_AGE)
+	/// ).result();
+	/// ```
+  ///
+  /// @param target      the object to validate
+  /// @param validations the validation functions applied in order
+  /// @param <T>         the target type
+  /// @param <E>         the error type
+  /// @return the validator after all validations have been applied
+  /// @throws NullPointerException if `target` or `validations` is null
+	@SafeVarargs
+	public static <T, E> @NonNull Validator<T, E> compose(T target,
+			UnaryOperator<Validator<T, E>> @NonNull... validations) {
+		return Arrays.stream(validations).reduce(of(target), (v, fn) -> fn.apply(v), (a, b) -> b);
 	}
 }

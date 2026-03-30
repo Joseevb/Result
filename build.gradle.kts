@@ -2,12 +2,14 @@ plugins {
   `java-library`
   `maven-publish`
   signing
+  jacoco
 }
 
 subprojects {
   apply(plugin = "java-library")
   apply(plugin = "maven-publish")
   apply(plugin = "signing")
+  apply(plugin = "jacoco")
 
   group = "dev.jose"
   version = "0.1.0-SNAPSHOT"
@@ -17,11 +19,12 @@ subprojects {
   }
 
   java {
-    toolchain {
-      languageVersion.set(JavaLanguageVersion.of(25))
-    }
     withSourcesJar()
     withJavadocJar()
+  }
+
+  tasks.withType<JavaCompile>().configureEach {
+    options.compilerArgs.addAll(listOf("--enable-preview", "--release", "25"))
   }
 
   dependencies {
@@ -41,6 +44,33 @@ subprojects {
 
   tasks.test {
     useJUnitPlatform()
+    finalizedBy(tasks.jacocoTestReport) // report is always generated after tests run
+  }
+
+  tasks.jacocoTestReport {
+    dependsOn(tasks.test) // tests are required to run before generating the report
+  }
+
+  tasks.jacocoTestCoverageVerification {
+    violationRules {
+      rule {
+        limit {
+          minimum = "0.8".toBigDecimal()
+        }
+      }
+
+      rule {
+        isEnabled = false
+        element = "CLASS"
+        includes = listOf("org.gradle.*")
+
+        limit {
+          counter = "LINE"
+          value = "TOTALCOUNT"
+          maximum = "0.8".toBigDecimal()
+        }
+      }
+    }
   }
 
   // Publishing configuration

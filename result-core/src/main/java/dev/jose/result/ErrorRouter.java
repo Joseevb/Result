@@ -1,258 +1,171 @@
 package dev.jose.result;
 
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
 import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
-import org.slf4j.Logger;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.function.BiConsumer;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.function.Function;
 
-/// A declarative utility for mapping Java Exceptions to Domain Errors.
+/// A **pure, immutable** error router that maps Java exceptions to domain-specific error types.
 ///
-/// This class eliminates verbose `try-catch` blocks and `switch` statements in Service layers.
-/// It allows you to define exception mapping logic once and reuse it across multiple methods.
+/// This class provides a functional approach to exception mapping, allowing you to declaratively
+/// define how different exception types should be transformed into your application's error
+/// representation. The router is **immutable** — all configuration methods return new instances.
 ///
-/// # Features
-/// - Declarative exception-to-error mapping
-/// - Built-in logging support
-/// - Metrics/observability integration via Micrometer
-/// - Order-aware rule evaluation
-/// - Shadowing detection for debugging
+/// ## Design Philosophy
 ///
-/// # Usage Example
+/// - **Pure**: No side effects, no external dependencies
+/// - **Immutable**: Thread-safe by design, no synchronization needed
+/// - **Composable**: Chain methods to build complex routing rules
+/// - **Type-safe**: Leverages Java's type system for compile-time safety
+///
+/// ## Basic Usage
+///
 /// ```java
-/// // Define the router once (e.g., in your Error Interface)
-/// Function<Exception, UserError> ERROR_MAPPER = ErrorRouter
-///     .defaultsTo(e -> new UserError.SystemFailure(e.getMessage()))
-///     .withLogging(log) // Optional: add logging
-///     .withMetrics(meterRegistry, "user.errors") // Optional: add metrics
-///     .map(IllegalArgumentException.class, e -> new UserError.InvalidInput(e.getMessage()))
-///     .map(DataIntegrityViolationException.class, _ -> new UserError.EmailExists("Taken"));
+/// var router = ErrorRouter
+///     .<AppError>defaultsTo(ex -> AppError.UNKNOWN)
+///     .map(IllegalArgumentException.class, ex -> AppError.INVALID_INPUT)
+///     .map(IOException.class, ex -> AppError.NETWORK_FAILURE);
 ///
-/// // Use it in your service
-/// return Result.attempt(
-///     () -> repository.save(entity),
-///     ERROR_MAPPER
-/// );
+/// AppError error = router.apply(someException);
 /// ```
 ///
-/// @param <E> The type of Domain Error (usually a Sealed Interface)
-public class ErrorRouter<E> implements Function<Exception, E> {
+/// ## Rule Ordering
+///
+/// Rules are evaluated in **registration order**. More specific exception types should be
+/// registered before general ones:
+///
+/// ```java
+/// var router = ErrorRouter
+///     .<AppError>defaultsTo(ex -> AppError.UNKNOWN)
+///     .map(FileNotFoundException.class, ex -> AppError.MISSING_FILE)  // Specific first
+///     .map(IOException.class, ex -> AppError.IO_ERROR);               // General second
+/// ```
+///
+/// @param <E> the domain error type this router produces
+/// @see MeteredErrorRouter for adding metrics
+/// @see CachedErrorRouter for adding caching
+/// @author Jose
+/// @since 1.0.0
+public final class ErrorRouter<E> implements Function<Exception, E> {
 
-	private final Map<Class<? extends Exception>, Function<Exception, E>> registry = new LinkedHashMap<>();
-
+	private final List<Rule<E>> rules;
 	private final Function<Exception, E> fallback;
 
-	private final Logger logger;
-
-	private final MeterRegistry meterRegistry;
-
-	private final String metricPrefix;
-
-	private final boolean enableShadowWarnings;
-
-	private ErrorRouter(Function<Exception, E> fallback, Logger logger, MeterRegistry meterRegistry,
-			String metricPrefix, boolean enableShadowWarnings) {
-		this.fallback = fallback;
-		this.logger = logger;
-		this.meterRegistry = meterRegistry;
-		this.metricPrefix = metricPrefix;
-		this.enableShadowWarnings = enableShadowWarnings;
+	/// Internal record representing a single routing rule.
+  ///
+  /// Each rule associates an exception type with a mapper function that converts
+  /// instances of that exception (or its subclasses) to the domain error type.
+  ///
+  /// @param <E> the domain error type
+	private record Rule<E>(Class<? extends Exception> type, Function<Exception, E> mapper) {
+		/// Checks if this rule matches the given exception.
+    ///
+    /// Uses `isInstance()` to support both exact matches and subclasses.
+    ///
+    /// @param ex the exception to check
+    /// @return `true` if this rule applies to the exception
+		boolean matches(Exception ex) {
+			return this.type.isInstance(ex);
+		}
 	}
 
-	/// Creates a new `ErrorRouter` with a mandatory fallback strategy.
-    ///
-    /// This is the entry point for the builder. The fallback function will be executed
-    /// if an exception is thrown that does not match any specifically mapped classes.
-    ///
-    /// @param fallback A function that converts any unhandled `Exception` into error type `E`.
-    /// @return A new instance of `ErrorRouter`.
+	/// Private constructor. Use factory methods instead.
+  ///
+  /// @param rules    the list of routing rules (already copied/defensive)
+  /// @param fallback the fallback mapper for unmatched exceptions
+	private ErrorRouter(List<Rule<E>> rules, Function<Exception, E> fallback) {
+		this.rules = Objects.requireNonNull(rules, "Rules list cannot be null");
+		this.fallback = Objects.requireNonNull(fallback, "Fallback ErrorRouter cannot be null");
+	}
+
+	/// Creates a new `ErrorRouter` with the specified fallback mapper.
+  ///
+  /// The fallback is invoked when no registered rule matches an exception.
+  /// This is the **entry point** for building a router.
+  ///
+  /// ## Example
+  ///
+  /// ```java
+    /// var router = ErrorRouter
+    ///     .<ApiError>defaultsTo(ex -> ApiError.UNEXPECTED);
+    /// ```
+  ///
+  /// @param fallback the function to apply when no rule matches
+  /// @param <E>      the domain error type
+  /// @return a new `ErrorRouter` with only the fallback configured
+  /// @throws NullPointerException if `fallback` is null
 	@Contract("_ -> new")
-	public static <E> @NonNull ErrorRouter<E> defaultsTo(Function<Exception, E> fallback) {
-		return new ErrorRouter<>(fallback, null, null, null, false);
+	public static <E> @NonNull ErrorRouter<E> defaultsTo(@NonNull Function<Exception, E> fallback) {
+		return new ErrorRouter<>(List.of(), fallback);
 	}
 
-	/// Enables logging for all exception mappings.
-    ///
-    /// When enabled, each exception mapping will be logged at WARN level.
-    ///
-    /// @param logger The SLF4J logger to use.
-    /// @return This instance for method chaining.
-	public ErrorRouter<E> withLogging(Logger logger) {
-		return new ErrorRouter<>(this.fallback, logger, this.meterRegistry, this.metricPrefix,
-				this.enableShadowWarnings);
+	/// Registers a mapping for a specific exception type.
+  ///
+  /// The mapper will be applied to instances of the specified type **and its subclasses**.
+  /// To avoid shadowing issues, register more specific types before general ones.
+  ///
+  /// ## Example
+  ///
+  /// ```java
+    /// var router = ErrorRouter
+    ///     .<AppError>defaultsTo(ex -> AppError.UNKNOWN)
+    ///     .map(ValidationException.class, ex -> AppError.VALIDATION_FAILED);
+    /// ```
+  ///
+  /// @param type   the exception type to match (including subclasses)
+  /// @param mapper the function to convert matching exceptions to domain errors
+  /// @param <X>    the specific exception type
+  /// @return a new `ErrorRouter` with this rule appended
+  /// @throws NullPointerException if `type` or `mapper` is null
+	@Contract("_, _ -> new")
+	public <X extends Exception> @NonNull ErrorRouter<E> map(@NonNull Class<X> type, @NonNull Function<X, E> mapper) {
+		final var newRules = new ArrayList<Rule<E>>(this.rules.size() + 1);
+		newRules.addAll(this.rules);
+		newRules.add(new Rule<>(type, ex -> mapper.apply(type.cast(ex))));
+		return new ErrorRouter<>(List.copyOf(newRules), this.fallback);
 	}
 
-	/// Enables metrics/observability integration via Micrometer.
-    ///
-    /// Creates counters for each error type mapped.
-    ///
-    /// # Example
-    /// ```java
-  /// router.withMetrics(meterRegistry, "app.errors")
-  ///     // Creates counters like: app.errors.IllegalArgumentException
-  /// ```
-    ///
-    /// @param meterRegistry The Micrometer MeterRegistry.
-    /// @param metricPrefix  The prefix for metric names.
-    /// @return This instance for method chaining.
-	public ErrorRouter<E> withMetrics(MeterRegistry meterRegistry, String metricPrefix) {
-		return new ErrorRouter<>(this.fallback, this.logger, meterRegistry, metricPrefix, this.enableShadowWarnings);
-	}
-
-	/// Enables shadow detection warnings.
-    ///
-    /// When enabled, warns if a more specific exception is registered after
-    /// a more general one (which would cause the specific one to be shadowed).
-    ///
-    /// Useful during development to catch configuration mistakes.
-    ///
-    /// @return This instance for method chaining.
-	public ErrorRouter<E> withShadowWarnings() {
-		return new ErrorRouter<>(this.fallback, this.logger, this.meterRegistry, this.metricPrefix, true);
-	}
-
-	/// Registers a specific mapping rule for a given Exception type.
-    ///
-    /// # Order Matters
-    /// Rules are evaluated in the order they are defined. If you map `RuntimeException`
-    /// before `IllegalArgumentException`, the first one will win. Always map specific
-    /// exceptions before generic ones.
-    ///
-    /// # Shadowing Detection
-    /// If shadow warnings are enabled, this method will warn you if you're registering
-    /// a rule that will never be matched due to a previously registered parent class.
-    ///
-    /// @param type   The class of the exception to handle (e.g., `IllegalArgumentException.class`).
-    /// @param mapper A function that converts this specific exception `X` into error type `E`.
-    /// @return This instance for method chaining.
-	public <X extends Exception> ErrorRouter<E> map(Class<X> type, Function<X, E> mapper) {
-		// Shadow detection
-		if (this.enableShadowWarnings && this.logger != null) {
-			this.registry.keySet().stream()
-					.filter(existing -> existing.isAssignableFrom(type) && !existing.equals(type)).findFirst()
-					.ifPresent(shadowing -> this.logger.warn(
-							"ErrorRouter: {} will be shadowed by {} - reorder your mappings", type.getSimpleName(),
-							shadowing.getSimpleName()));
-		}
-
-		this.registry.put(type, ex -> mapper.apply(type.cast(ex)));
-		return this;
-	}
-
-	/// Registers a mapping for an exception and all its subclasses.
-    ///
-    /// This is a convenience method that's semantically clearer when you intend
-    /// to handle an entire exception hierarchy.
-    ///
-    /// @param baseType The base exception class.
-    /// @param mapper   Function to map the exception.
-    /// @return This instance for method chaining.
-	public <X extends Exception> ErrorRouter<E> mapAll(Class<X> baseType, Function<X, E> mapper) {
-		return this.map(baseType, mapper);
-	}
-
-	/// Registers a mapping with custom side effects.
-    ///
-    /// Allows you to perform additional actions when a specific exception is caught,
-    /// such as custom logging or alerting.
-    ///
-    /// # Example
-    /// ```java
-  /// router.mapWithEffect(
-  ///     SQLException.class,
-  ///     (ex, error) -> alerting.sendAlert("Database error", ex),
-  ///     ex -> new DbError(ex.getMessage())
-  /// );
-  /// ```
-    ///
-    /// @param type      The exception class to handle.
-    /// @param sideEffect Action to perform when this exception is caught.
-    /// @param mapper    Function to map the exception to domain error.
-    /// @return This instance for method chaining.
-	public <X extends Exception> ErrorRouter<E> mapWithEffect(Class<X> type, BiConsumer<X, E> sideEffect,
-			Function<X, E> mapper) {
-		return this.map(type, ex -> {
-			final E error = mapper.apply(ex);
-			sideEffect.accept(ex, error);
-			return error;
-		});
-	}
-
-	/// Executes the mapping logic.
-    ///
-    /// Iterates through registered rules. The first rule where `ruleKey.isInstance(e)`
-    /// returns true is executed. If no match is found, the fallback is used.
-    ///
-    /// Side effects (logging, metrics) are performed automatically if configured.
-    ///
-    /// @param e The exception that occurred.
-    /// @return The mapped Domain Error.
+	/// Applies this router to an exception, returning the mapped domain error.
+  ///
+  /// Rules are evaluated in registration order. The first matching rule's
+  /// mapper is applied. If no rule matches, the fallback mapper is used.
+  ///
+  /// ## Thread Safety
+  ///
+  /// This method is **thread-safe**. The router is immutable, so concurrent
+  /// invocations do not interfere.
+  ///
+  /// @param exception the exception to map
+  /// @return the domain error representation
+  /// @throws NullPointerException if `exception` is null
 	@Override
-	public E apply(Exception e) {
-		// Find matching rule
-		final var matchedEntry = this.registry.entrySet().stream().filter(entry -> entry.getKey().isInstance(e))
-				.findFirst();
-
-		final E error;
-		final String exceptionType;
-
-		if (matchedEntry.isPresent()) {
-			exceptionType = matchedEntry.get().getKey().getSimpleName();
-			error = matchedEntry.get().getValue().apply(e);
-		} else {
-			exceptionType = e.getClass().getSimpleName() + " (unmapped)";
-			error = this.fallback.apply(e);
+	public E apply(@NonNull Exception exception) {
+		for (final var rule : this.rules) {
+			if (rule.matches(exception)) {
+				return rule.mapper().apply(exception);
+			}
 		}
-
-		// Perform side effects
-		this.recordLog(e, error, exceptionType);
-		this.recordMetric(exceptionType);
-
-		return error;
+		return this.fallback.apply(exception);
 	}
 
-	/// Records a log entry if logging is enabled.
-    ///
-    /// @param exception     The original exception.
-    /// @param mappedError   The resulting domain error.
-    /// @param exceptionType The exception type name.
-	private void recordLog(Exception exception, E mappedError, String exceptionType) {
-		if (this.logger != null) {
-			this.logger.warn("Exception mapped: {} -> {}", exceptionType, mappedError.getClass().getSimpleName(),
-					exception);
-		}
+	/// Returns the number of registered rules (excluding the fallback).
+  ///
+  /// @return the count of explicit mapping rules
+	public int ruleCount() {
+		return this.rules.size();
 	}
 
-	/// Records a metric if metrics are enabled.
-    ///
-    /// @param exceptionType The exception type name.
-	private void recordMetric(String exceptionType) {
-		if (this.meterRegistry != null && this.metricPrefix != null) {
-			Counter.builder(this.metricPrefix).tag("exception", exceptionType)
-					.description("Count of exceptions mapped to domain errors").register(this.meterRegistry)
-					.increment();
-		}
-	}
-
-	/// Returns the number of registered exception mappings.
-    ///
-    /// Useful for testing and debugging.
-    ///
-    /// @return The count of registered mappings.
-	public int mappingCount() {
-		return this.registry.size();
-	}
-
-	/// Checks if a specific exception type has a registered mapping.
-    ///
-    /// @param type The exception class to check.
-    /// @return true if a mapping exists for this exact type.
-	public boolean hasMappingFor(Class<? extends Exception> type) {
-		return this.registry.containsKey(type);
+	/// Checks if any rule is registered for the exact specified type.
+  ///
+  /// Note: This checks for exact type match, not subclass matching.
+  /// Use `ruleCount()` to check if any rules exist at all.
+  ///
+  /// @param type the exception type to check
+  /// @return `true` if a rule exists for the exact type
+	public boolean hasRuleFor(@NonNull Class<? extends Exception> type) {
+		return this.rules.stream().anyMatch(r -> r.type().equals(type));
 	}
 }
