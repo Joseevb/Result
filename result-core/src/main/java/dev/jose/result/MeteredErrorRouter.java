@@ -4,10 +4,9 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Tags;
-import org.jspecify.annotations.NonNull;
-
 import java.util.Objects;
 import java.util.function.Function;
+import org.jspecify.annotations.NonNull;
 
 /// A **decorator** that adds Micrometer metrics to an [ErrorRouter].
 ///
@@ -56,38 +55,43 @@ import java.util.function.Function;
 /// @since 1.0.0
 public final class MeteredErrorRouter<E> implements Function<Exception, E> {
 
-	private final ErrorRouter<E> delegate;
-	private final MeterRegistry meterRegistry;
-	private final String metricName;
-	private final Iterable<Tag> commonTags;
+  private final ErrorRouter<E> delegate;
+  private final MeterRegistry meterRegistry;
+  private final String metricName;
+  private final Iterable<Tag> commonTags;
 
-	/// Creates a new metered error router.
+  /// Creates a new metered error router.
   ///
   /// @param delegate      the underlying error router to wrap
   /// @param meterRegistry the Micrometer registry for recording metrics
   /// @param metricName    the base name for the counter metric
   /// @throws NullPointerException if any parameter is null
-	public MeteredErrorRouter(@NonNull ErrorRouter<E> delegate, @NonNull MeterRegistry meterRegistry,
-			@NonNull String metricName) {
-		this(delegate, meterRegistry, metricName, Tags.empty());
-	}
+  public MeteredErrorRouter(
+      @NonNull ErrorRouter<E> delegate,
+      @NonNull MeterRegistry meterRegistry,
+      @NonNull String metricName) {
+    this(delegate, meterRegistry, metricName, Tags.empty());
+  }
 
-	/// Creates a new metered error router with additional common tags.
+  /// Creates a new metered error router with additional common tags.
   ///
   /// @param delegate      the underlying error router to wrap
   /// @param meterRegistry the Micrometer registry for recording metrics
   /// @param metricName    the base name for the counter metric
   /// @param commonTags    tags to add to every metric recording
   /// @throws NullPointerException if any parameter is null
-	public MeteredErrorRouter(@NonNull ErrorRouter<E> delegate, @NonNull MeterRegistry meterRegistry,
-			@NonNull String metricName, @NonNull Iterable<Tag> commonTags) {
-		this.delegate = Objects.requireNonNull(delegate, "Delegate ErrorRouter cannot be null");
-		this.meterRegistry = Objects.requireNonNull(meterRegistry, "MeterRegistry cannot be null");
-		this.metricName = Objects.requireNonNull(metricName, "Metric name cannot be null");
-		this.commonTags = Objects.requireNonNull(commonTags, "Common Tags cannot be null");
-	}
+  public MeteredErrorRouter(
+      @NonNull ErrorRouter<E> delegate,
+      @NonNull MeterRegistry meterRegistry,
+      @NonNull String metricName,
+      @NonNull Iterable<Tag> commonTags) {
+    this.delegate = Objects.requireNonNull(delegate, "Delegate ErrorRouter cannot be null");
+    this.meterRegistry = Objects.requireNonNull(meterRegistry, "MeterRegistry cannot be null");
+    this.metricName = Objects.requireNonNull(metricName, "Metric name cannot be null");
+    this.commonTags = Objects.requireNonNull(commonTags, "Common Tags cannot be null");
+  }
 
-	/// Applies the delegate router and records metrics about the operation.
+  /// Applies the delegate router and records metrics about the operation.
   ///
   /// Records:
   /// - The exception type that was mapped
@@ -96,24 +100,28 @@ public final class MeteredErrorRouter<E> implements Function<Exception, E> {
   /// @param exception the exception to map
   /// @return the domain error from the delegate router
   /// @throws NullPointerException if `exception` is null
-	@Override
-	public E apply(@NonNull Exception exception) {
-		final E result = this.delegate.apply(exception);
+  @Override
+  public E apply(@NonNull Exception exception) {
+    final E result = this.delegate.apply(exception);
 
-		Counter.builder(this.metricName).tags(this.commonTags).tag("exception", exception.getClass().getSimpleName())
-				.tag("mapped_to", result != null ? result.getClass().getSimpleName() : "null")
-				.description("Count of exceptions mapped to domain errors").register(this.meterRegistry).increment();
+    Counter.builder(this.metricName)
+        .tags(this.commonTags)
+        .tag("exception", exception.getClass().getSimpleName())
+        .tag("mapped_to", result != null ? result.getClass().getSimpleName() : "null")
+        .description("Count of exceptions mapped to domain errors")
+        .register(this.meterRegistry)
+        .increment();
 
-		return result;
-	}
+    return result;
+  }
 
-	/// Returns the underlying delegate router.
+  /// Returns the underlying delegate router.
   ///
   /// Useful for accessing `ruleCount()` or other methods not exposed
   /// by the `Function` interface.
   ///
   /// @return the wrapped `ErrorRouter`
-	public @NonNull ErrorRouter<E> delegate() {
-		return this.delegate;
-	}
+  public @NonNull ErrorRouter<E> delegate() {
+    return this.delegate;
+  }
 }

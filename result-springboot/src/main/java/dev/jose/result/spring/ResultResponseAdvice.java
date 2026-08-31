@@ -3,6 +3,8 @@ package dev.jose.result.spring;
 import dev.jose.result.Result;
 import dev.jose.result.utils.Failure;
 import jakarta.servlet.http.HttpServletRequest;
+import java.net.URI;
+import java.util.Locale;
 import org.jspecify.annotations.NonNull;
 import org.springframework.context.MessageSource;
 import org.springframework.core.MethodParameter;
@@ -19,9 +21,6 @@ import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
-
-import java.net.URI;
-import java.util.Locale;
 
 /// Unwraps controller `Result` responses and converts domain failures to
 /// standard `ProblemDetail` responses.
@@ -45,74 +44,82 @@ import java.util.Locale;
 @RestControllerAdvice
 public class ResultResponseAdvice implements ResponseBodyAdvice<Object> {
 
-	private final MessageSource messageSource;
+  private final MessageSource messageSource;
 
-	/// Creates the advice with the application's message source.
-	///
-	/// @param messageSource source used to localize failure details and titles
-	public ResultResponseAdvice(MessageSource messageSource) {
-		this.messageSource = messageSource;
-	}
+  /// Creates the advice with the application's message source.
+  ///
+  /// @param messageSource source used to localize failure details and titles
+  public ResultResponseAdvice(MessageSource messageSource) {
+    this.messageSource = messageSource;
+  }
 
-	/// Applies only to direct `Result` responses and `ResponseEntity` responses
-	/// whose declared body type is `Result`.
-	@Override
-	public boolean supports(MethodParameter returnType,
-			@NonNull Class<? extends HttpMessageConverter<?>> converterType) {
-		final ResolvableType declaredType = ResolvableType.forMethodParameter(returnType);
-		if (Result.class.isAssignableFrom(declaredType.toClass())) {
-			return true;
-		}
+  /// Applies only to direct `Result` responses and `ResponseEntity` responses
+  /// whose declared body type is `Result`.
+  @Override
+  public boolean supports(
+      MethodParameter returnType, @NonNull Class<? extends HttpMessageConverter<?>> converterType) {
+    final ResolvableType declaredType = ResolvableType.forMethodParameter(returnType);
+    if (Result.class.isAssignableFrom(declaredType.toClass())) {
+      return true;
+    }
 
-		if (!ResponseEntity.class.isAssignableFrom(declaredType.toClass())) {
-			return false;
-		}
+    if (!ResponseEntity.class.isAssignableFrom(declaredType.toClass())) {
+      return false;
+    }
 
-		final Class<?> bodyType = declaredType.getGeneric(0).resolve();
-		return bodyType != null && Result.class.isAssignableFrom(bodyType);
-	}
+    final Class<?> bodyType = declaredType.getGeneric(0).resolve();
+    return bodyType != null && Result.class.isAssignableFrom(bodyType);
+  }
 
-	/// Unwraps an `Ok` or converts an `Err` to `ProblemDetail` before the body is
-	/// serialized.
-	@Override
-	public Object beforeBodyWrite(Object body, @NonNull MethodParameter returnType,
-			@NonNull MediaType selectedContentType,
-			@NonNull Class<? extends HttpMessageConverter<?>> selectedConverterType,
-			@NonNull ServerHttpRequest request, @NonNull ServerHttpResponse response) {
-		if (!(body instanceof Result<?, ?> result)) {
-			return body;
-		}
+  /// Unwraps an `Ok` or converts an `Err` to `ProblemDetail` before the body is
+  /// serialized.
+  @Override
+  public Object beforeBodyWrite(
+      Object body,
+      @NonNull MethodParameter returnType,
+      @NonNull MediaType selectedContentType,
+      @NonNull Class<? extends HttpMessageConverter<?>> selectedConverterType,
+      @NonNull ServerHttpRequest request,
+      @NonNull ServerHttpResponse response) {
+    if (!(body instanceof Result<?, ?> result)) {
+      return body;
+    }
 
-		return switch (result) {
-			case Result.Ok(var value) -> value;
-			case Result.Err(var error) when error instanceof Failure failure ->
-					this.createProblemDetail(failure, request, response);
-			case Result.Err(var error) -> throw new IllegalStateException(
-					"Result.Err error must implement Failure, got: " + error.getClass().getName());
-		};
-	}
+    return switch (result) {
+      case Result.Ok(var value) -> value;
+      case Result.Err(var error) when error instanceof Failure failure ->
+          this.createProblemDetail(failure, request, response);
+      case Result.Err(var error) ->
+          throw new IllegalStateException(
+              "Result.Err error must implement Failure, got: " + error.getClass().getName());
+    };
+  }
 
-	private ProblemDetail createProblemDetail(Failure failure, ServerHttpRequest request,
-			ServerHttpResponse response) {
-		final HttpServletRequest servletRequest = ((ServletServerHttpRequest) request).getServletRequest();
-		final Locale locale = servletRequest.getLocale();
-		final ResponseStatus responseStatus = AnnotatedElementUtils.findMergedAnnotation(failure.getClass(),
-				ResponseStatus.class);
-		final HttpStatus status = responseStatus == null ? HttpStatus.INTERNAL_SERVER_ERROR : responseStatus.code();
+  private ProblemDetail createProblemDetail(
+      Failure failure, ServerHttpRequest request, ServerHttpResponse response) {
+    final HttpServletRequest servletRequest =
+        ((ServletServerHttpRequest) request).getServletRequest();
+    final Locale locale = servletRequest.getLocale();
+    final ResponseStatus responseStatus =
+        AnnotatedElementUtils.findMergedAnnotation(failure.getClass(), ResponseStatus.class);
+    final HttpStatus status =
+        responseStatus == null ? HttpStatus.INTERNAL_SERVER_ERROR : responseStatus.code();
 
-		final String simpleName = failure.getClass().getSimpleName();
-		final String detail = this.messageSource.getMessage("error." + simpleName, failure.getMessageArgs(),
-				failure.getMessage(), locale);
-		final String title = this.messageSource.getMessage("error.title." + simpleName, null, failure.getTitle(),
-				locale);
+    final String simpleName = failure.getClass().getSimpleName();
+    final String detail =
+        this.messageSource.getMessage(
+            "error." + simpleName, failure.getMessageArgs(), failure.getMessage(), locale);
+    final String title =
+        this.messageSource.getMessage(
+            "error.title." + simpleName, null, failure.getTitle(), locale);
 
-		final ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(status, detail);
-		problemDetail.setTitle(title);
-		problemDetail.setInstance(URI.create(servletRequest.getRequestURI()));
-		failure.getExtensions().forEach(problemDetail::setProperty);
-		problemDetail.setProperty("errorCode", failure.getErrorCode());
+    final ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(status, detail);
+    problemDetail.setTitle(title);
+    problemDetail.setInstance(URI.create(servletRequest.getRequestURI()));
+    failure.getExtensions().forEach(problemDetail::setProperty);
+    problemDetail.setProperty("errorCode", failure.getErrorCode());
 
-		response.setStatusCode(status);
-		return problemDetail;
-	}
+    response.setStatusCode(status);
+    return problemDetail;
+  }
 }

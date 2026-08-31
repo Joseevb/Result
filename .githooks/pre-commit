@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+set -e
+
+./gradlew spotlessApply
+
+git diff --name-only --cached --diff-filter=ACMR \
+  | rg '\.java$' \
+  | xargs -r git add

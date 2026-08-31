@@ -1,11 +1,10 @@
 package dev.jose.result;
 
-import org.jspecify.annotations.NonNull;
-
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import org.jspecify.annotations.NonNull;
 
 /// A **decorator** that adds caching to an [ErrorRouter].
 ///
@@ -60,19 +59,19 @@ import java.util.function.Function;
 /// @since 1.0.0
 public final class CachedErrorRouter<E> implements Function<Exception, E> {
 
-	private final ErrorRouter<E> delegate;
-	private final ConcurrentHashMap<Class<?>, Optional<E>> cache;
+  private final ErrorRouter<E> delegate;
+  private final ConcurrentHashMap<Class<?>, Optional<E>> cache;
 
-	/// Creates a new cached error router wrapping the given delegate.
+  /// Creates a new cached error router wrapping the given delegate.
   ///
   /// @param delegate the underlying error router to cache results from
   /// @throws NullPointerException if `delegate` is null
-	public CachedErrorRouter(@NonNull ErrorRouter<E> delegate) {
-		this.delegate = Objects.requireNonNull(delegate, "Delegate ErrorRouter cannot be null");
-		this.cache = new ConcurrentHashMap<>();
-	}
+  public CachedErrorRouter(@NonNull ErrorRouter<E> delegate) {
+    this.delegate = Objects.requireNonNull(delegate, "Delegate ErrorRouter cannot be null");
+    this.cache = new ConcurrentHashMap<>();
+  }
 
-	/// Applies the delegate router, caching the result by exception class.
+  /// Applies the delegate router, caching the result by exception class.
   ///
   /// Subsequent calls with exceptions of the same class will return the
   /// cached result without re-evaluating routing rules. The delegate evaluation
@@ -94,35 +93,35 @@ public final class CachedErrorRouter<E> implements Function<Exception, E> {
   /// @param exception the exception to map
   /// @return the domain error (possibly from cache, may be null)
   /// @throws NullPointerException if `exception` is null
-	@Override
-	public E apply(@NonNull Exception exception) {
-		final Class<?> key = exception.getClass();
+  @Override
+  public E apply(@NonNull Exception exception) {
+    final Class<?> key = exception.getClass();
 
-		// Use computeIfAbsent to guarantee atomic execution and thread-safety
-		final Optional<E> resultOpt = this.cache.computeIfAbsent(key,
-				_ -> Optional.ofNullable(this.delegate.apply(exception)));
+    // Use computeIfAbsent to guarantee atomic execution and thread-safety
+    final Optional<E> resultOpt =
+        this.cache.computeIfAbsent(key, _ -> Optional.ofNullable(this.delegate.apply(exception)));
 
-		return resultOpt.orElse(null);
-	}
+    return resultOpt.orElse(null);
+  }
 
-	/// Returns the current cache size (number of unique exception classes).
+  /// Returns the current cache size (number of unique exception classes).
   ///
   /// @return the number of cached mappings
-	public int cacheSize() {
-		return this.cache.size();
-	}
+  public int cacheSize() {
+    return this.cache.size();
+  }
 
-	/// Clears all cached mappings.
+  /// Clears all cached mappings.
   ///
   /// Subsequent calls will re-evaluate routing rules.
-	public void clearCache() {
-		this.cache.clear();
-	}
+  public void clearCache() {
+    this.cache.clear();
+  }
 
-	/// Returns the underlying delegate router.
+  /// Returns the underlying delegate router.
   ///
   /// @return the wrapped `ErrorRouter`
-	public @NonNull ErrorRouter<E> delegate() {
-		return this.delegate;
-	}
+  public @NonNull ErrorRouter<E> delegate() {
+    return this.delegate;
+  }
 }

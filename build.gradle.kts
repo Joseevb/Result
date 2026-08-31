@@ -3,6 +3,7 @@ plugins {
   `maven-publish`
   signing
   jacoco
+  id("com.diffplug.spotless") version "8.3.0" apply false
 }
 
 subprojects {
@@ -10,6 +11,7 @@ subprojects {
   apply(plugin = "maven-publish")
   apply(plugin = "signing")
   apply(plugin = "jacoco")
+  apply(plugin = "com.diffplug.spotless")
 
   group = "dev.jose"
   version = "0.1.0-SNAPSHOT"
@@ -115,5 +117,16 @@ subprojects {
           !gradle.taskGraph.hasTask(":${project.name}:publishToMavenLocal")
     }
     sign(publishing.publications["maven"])
+  }
+
+  configure<com.diffplug.gradle.spotless.SpotlessExtension> {
+    java {
+      target("src/**/*.java")
+      googleJavaFormat()
+    }
+  }
+
+  tasks.named("check") {
+    dependsOn("spotlessCheck")
   }
 }
