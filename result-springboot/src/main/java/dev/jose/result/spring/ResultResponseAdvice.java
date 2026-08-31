@@ -1,6 +1,5 @@
 package dev.jose.result.spring;
 
-import dev.jose.result.Failure;
 import dev.jose.result.Result;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;

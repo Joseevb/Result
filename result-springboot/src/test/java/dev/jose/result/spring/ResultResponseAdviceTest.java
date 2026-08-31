@@ -11,7 +11,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import dev.jose.result.Result;
-import dev.jose.result.utils.Failure;
 import jakarta.servlet.ServletException;
 import java.lang.reflect.Method;
 import java.util.Locale;
