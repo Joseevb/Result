@@ -1,4 +1,4 @@
-package dev.jose.result.utils;
+package dev.jose.result.spring;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;

@@ -80,7 +80,7 @@ Spring Boot integration:
 Start with a sealed interface representing all possible errors your operation can produce:
 
 ```java
-public sealed interface UserError implements Failure {
+public sealed interface UserError extends Failure {
     @ResponseStatus(HttpStatus.NOT_FOUND)
     record NotFound(Long id) implements UserError {}
 

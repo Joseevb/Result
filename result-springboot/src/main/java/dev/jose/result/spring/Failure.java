@@ -1,5 +1,6 @@
-package dev.jose.result;
+package dev.jose.result.spring;
 
+import java.util.Locale;
 import java.util.Map;
 
 /// Framework-agnostic metadata for a domain failure.

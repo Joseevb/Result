@@ -33,9 +33,6 @@ subprojects {
     // Nullability annotations
     compileOnly(rootProject.libs.jspecify)
 
-    // Observability & Logging (compileOnly - users bring their own)
-    compileOnly(rootProject.libs.slf4j.api)
-
     // JUnit 6 - unified BOM for all JUnit components
     testImplementation(platform(rootProject.libs.junit.bom))
     testImplementation(rootProject.libs.junit.jupiter)
