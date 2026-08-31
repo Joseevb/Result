@@ -6,45 +6,41 @@ import java.util.Objects;
 import java.util.function.Function;
 import org.jspecify.annotations.NonNull;
 
-/// A **pure, immutable** error router that maps Java exceptions to domain-specific error types.
+/// A **pure, immutable** error router that maps Java exceptions to
+/// domain-specific error types.
 ///
-/// This class provides a functional approach to exception mapping, allowing you to declaratively
-/// define how different exception types should be transformed into your application's error
-/// representation. The router is **immutable** — all configuration methods return new instances.
+/// This class provides a functional approach to exception mapping, allowing you
+/// to declaratively define how different exception types should be transformed
+/// into your application's error representation. The router is **immutable** —
+/// all configuration methods return new instances.
 ///
 /// ## Design Philosophy
 ///
-/// - **Pure**: No side effects, no external dependencies
-/// - **Immutable**: Thread-safe by design, no synchronization needed
-/// - **Composable**: Chain methods to build complex routing rules
-/// - **Type-safe**: Leverages Java's type system for compile-time safety
+/// - **Pure**: No side effects, no external dependencies - **Immutable**:
+/// Thread-safe by design, no synchronization needed - **Composable**: Chain
+/// methods to build complex routing rules - **Type-safe**: Leverages Java's type
+/// system for compile-time safety
 ///
 /// ## Basic Usage
 ///
-/// ```java
-/// var router = ErrorRouter
-///     .<AppError>defaultsTo(ex -> AppError.UNKNOWN)
-///     .map(IllegalArgumentException.class, ex -> AppError.INVALID_INPUT)
-///     .map(IOException.class, ex -> AppError.NETWORK_FAILURE);
+/// ```java var router = ErrorRouter .<AppError>defaultsTo(ex ->
+/// AppError.UNKNOWN) .map(IllegalArgumentException.class, ex ->
+/// AppError.INVALID_INPUT) .map(IOException.class, ex ->
+/// AppError.NETWORK_FAILURE);
 ///
-/// AppError error = router.apply(someException);
-/// ```
+/// AppError error = router.apply(someException); ```
 ///
 /// ## Rule Ordering
 ///
-/// Rules are evaluated in **registration order**. More specific exception types should be
-/// registered before general ones:
+/// Rules are evaluated in **registration order**. More specific exception types
+/// should be registered before general ones:
 ///
-/// ```java
-/// var router = ErrorRouter
-///     .<AppError>defaultsTo(ex -> AppError.UNKNOWN)
-///     .map(FileNotFoundException.class, ex -> AppError.MISSING_FILE)  // Specific first
-///     .map(IOException.class, ex -> AppError.IO_ERROR);               // General second
-/// ```
+/// ```java var router = ErrorRouter .<AppError>defaultsTo(ex ->
+/// AppError.UNKNOWN) .map(FileNotFoundException.class, ex ->
+/// AppError.MISSING_FILE) // Specific first .map(IOException.class, ex ->
+/// AppError.IO_ERROR); // General second ```
 ///
 /// @param <E> the domain error type this router produces
-/// @see MeteredErrorRouter for adding metrics
-/// @see CachedErrorRouter for adding caching
 /// @author Jose
 /// @since 1.0.0
 public final class ErrorRouter<E> implements Function<Exception, E> {
@@ -81,15 +77,13 @@ public final class ErrorRouter<E> implements Function<Exception, E> {
 
   /// Creates a new `ErrorRouter` with the specified fallback mapper.
   ///
-  /// The fallback is invoked when no registered rule matches an exception.
-  /// This is the **entry point** for building a router.
+  /// The fallback is invoked when no registered rule matches an exception. This is
+  /// the **entry point** for building a router.
   ///
   /// ## Example
   ///
-  /// ```java
-  /// var router = ErrorRouter
-  ///     .<ApiError>defaultsTo(ex -> ApiError.UNEXPECTED);
-  /// ```
+  /// ```java var router = ErrorRouter .<ApiError>defaultsTo(ex ->
+  /// ApiError.UNEXPECTED); ```
   ///
   /// @param fallback the function to apply when no rule matches
   /// @param <E>      the domain error type
@@ -101,16 +95,15 @@ public final class ErrorRouter<E> implements Function<Exception, E> {
 
   /// Registers a mapping for a specific exception type.
   ///
-  /// The mapper will be applied to instances of the specified type **and its subclasses**.
-  /// To avoid shadowing issues, register more specific types before general ones.
+  /// The mapper will be applied to instances of the specified type **and its
+  /// subclasses**. To avoid shadowing issues, register more specific types before
+  /// general ones.
   ///
   /// ## Example
   ///
-  /// ```java
-  /// var router = ErrorRouter
-  ///     .<AppError>defaultsTo(ex -> AppError.UNKNOWN)
-  ///     .map(ValidationException.class, ex -> AppError.VALIDATION_FAILED);
-  /// ```
+  /// ```java var router = ErrorRouter .<AppError>defaultsTo(ex ->
+  /// AppError.UNKNOWN) .map(ValidationException.class, ex ->
+  /// AppError.VALIDATION_FAILED); ```
   ///
   /// @param type   the exception type to match (including subclasses)
   /// @param mapper the function to convert matching exceptions to domain errors
@@ -127,8 +120,8 @@ public final class ErrorRouter<E> implements Function<Exception, E> {
 
   /// Applies this router to an exception, returning the mapped domain error.
   ///
-  /// Rules are evaluated in registration order. The first matching rule's
-  /// mapper is applied. If no rule matches, the fallback mapper is used.
+  /// Rules are evaluated in registration order. The first matching rule's mapper
+  /// is applied. If no rule matches, the fallback mapper is used.
   ///
   /// ## Thread Safety
   ///
@@ -157,8 +150,8 @@ public final class ErrorRouter<E> implements Function<Exception, E> {
 
   /// Checks if any rule is registered for the exact specified type.
   ///
-  /// Note: This checks for exact type match, not subclass matching.
-  /// Use `ruleCount()` to check if any rules exist at all.
+  /// Note: This checks for exact type match, not subclass matching. Use
+  /// `ruleCount()` to check if any rules exist at all.
   ///
   /// @param type the exception type to check
   /// @return `true` if a rule exists for the exact type
