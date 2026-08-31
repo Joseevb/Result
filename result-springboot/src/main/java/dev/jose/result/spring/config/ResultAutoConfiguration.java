@@ -4,12 +4,15 @@ import dev.jose.result.spring.ResultResponseAdvice;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.MessageSource;
 import org.springframework.context.annotation.Bean;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
 /// Auto-configures Result response handling for Spring MVC applications.
 @AutoConfiguration
-@ConditionalOnClass(ResultResponseAdvice.class)
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+@ConditionalOnClass(ResponseBodyAdvice.class)
 public class ResultAutoConfiguration {
   /// Creates the auto-configuration.
   public ResultAutoConfiguration() {}
@@ -20,7 +23,7 @@ public class ResultAutoConfiguration {
   /// @return the configured Result response advice
   @Bean
   @ConditionalOnMissingBean
-  public ResultResponseAdvice resultResponseAdvice(MessageSource messageSource) {
+  ResultResponseAdvice resultResponseAdvice(MessageSource messageSource) {
     return new ResultResponseAdvice(messageSource);
   }
 }

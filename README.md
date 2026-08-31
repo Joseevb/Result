@@ -23,8 +23,7 @@ A modern, type-safe Result monad library for Java implementing Railway Oriented 
 - **Declarative Validation** -- Fluent `Validator` with field-level error collection
 - **Exception Mapping** -- `ErrorRouter` eliminates verbose try-catch-translate patterns
 - **Spring Boot Integration** -- Automatic controller response conversion with RFC 7807 Problem Details and i18n
-- **Observability** -- Built-in Micrometer metrics and SLF4J logging hooks
-- **Zero Core Dependencies** -- Nullability annotations are compile-only; bring your own SLF4J and Micrometer
+- **Zero Core Dependencies** -- Nullability annotations are compile-only
 
 ## Requirements
 
@@ -81,7 +80,7 @@ Spring Boot integration:
 Start with a sealed interface representing all possible errors your operation can produce:
 
 ```java
-public sealed interface UserError {
+public sealed interface UserError implements Failure {
     @ResponseStatus(HttpStatus.NOT_FOUND)
     record NotFound(Long id) implements UserError {}
 
@@ -546,13 +545,13 @@ On error, the advice automatically returns a Problem Details response:
 
 ```json
 {
-	"type": "about:blank",
-	"title": "Not Found",
-	"status": 404,
-	"detail": "User 123 not found",
-	"instance": "/users/123",
-	"errorCode": "NOT_FOUND",
-	"userId": 123
+  "type": "about:blank",
+  "title": "Not Found",
+  "status": 404,
+  "detail": "User 123 not found",
+  "instance": "/users/123",
+  "errorCode": "NOT_FOUND",
+  "userId": 123
 }
 ```
 
@@ -560,16 +559,16 @@ For validation errors:
 
 ```json
 {
-	"type": "about:blank",
-	"title": "Bad Request",
-	"status": 400,
-	"detail": "Validation failed",
-	"instance": "/users",
-	"errorCode": "VALIDATION_FAILED",
-	"errors": {
-		"email": "Invalid email format",
-		"name": "Length must be between 1 and 100"
-	}
+  "type": "about:blank",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "Validation failed",
+  "instance": "/users",
+  "errorCode": "VALIDATION_FAILED",
+  "errors": {
+    "email": "Invalid email format",
+    "name": "Length must be between 1 and 100"
+  }
 }
 ```
 

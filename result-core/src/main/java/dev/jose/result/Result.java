@@ -12,7 +12,6 @@ import java.util.function.Supplier;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 /// A generic implementation of the **Result Pattern** (Monad).
@@ -29,10 +28,10 @@ import org.jspecify.annotations.Nullable;
 /// Result<User, UserError> result = userService.findById(id);
 ///
 /// var response = result
-///     .map(User::getEmail)
-///     .inspect(email -> log.info("Found: " + email))
-///     .andThen(this::validateEmail)
-///     .unwrapOrThrow();
+///   .map(User::getEmail)
+///   .inspect(email -> log.info("Found: " + email))
+///   .andThen(this::validateEmail)
+///   .unwrapOrThrow(error -> new SomeException(...))
 /// ```
 ///
 /// @param <T> The type of the value in case of `Ok`.
@@ -46,7 +45,7 @@ public sealed interface Result<T, E> {
   ///
   /// @param value The value to wrap.
   /// @return An `Ok` instance.
-  static <T, E> @NonNull Result<T, E> ok(T value) {
+  static <T, E> Result<T, E> ok(T value) {
     return new Ok<>(value);
   }
 
@@ -54,7 +53,7 @@ public sealed interface Result<T, E> {
   ///
   /// @param error The error to wrap.
   /// @return An `Err` instance.
-  static <T, E> @NonNull Result<T, E> err(E error) {
+  static <T, E> Result<T, E> err(E error) {
     return new Err<>(error);
   }
 
@@ -70,7 +69,7 @@ public sealed interface Result<T, E> {
   /// A helper for void operations that succeeded.
   ///
   /// @return An `Ok` containing [Unit], practically empty.
-  static <E> @NonNull Result<Unit, E> empty() {
+  static <E> Result<Unit, E> empty() {
     return ok(Unit.INSTANCE);
   }
 
@@ -119,7 +118,7 @@ public sealed interface Result<T, E> {
   /// @return An `Ok` if the Optional has a value, otherwise an `Err`.
   @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
   static <T, E> Result<T, E> fromOptional(
-      @NonNull Optional<? extends T> optional, Supplier<? extends E> errorSupplier) {
+      Optional<? extends T> optional, Supplier<? extends E> errorSupplier) {
     return optional.<Result<T, E>>map(Result::ok).orElseGet(() -> err(errorSupplier.get()));
   }
 
@@ -132,8 +131,7 @@ public sealed interface Result<T, E> {
   /// @param results Stream of Result instances.
   /// @return Ok with list of all values, or first Err encountered.
   static <T, E, A, R> Result<R, E> collect(
-      @NonNull Stream<? extends Result<T, E>> results,
-      @NonNull Collector<? super T, A, R> collector) {
+      Stream<? extends Result<T, E>> results, Collector<? super T, A, R> collector) {
     final A accumulator = collector.supplier().get();
     final var accAction = collector.accumulator();
 
@@ -191,7 +189,7 @@ public sealed interface Result<T, E> {
   ///
   /// @param results The list of Results to sequence.
   /// @return A Result containing all values or the first error.
-  static <T, E> Result<List<T>, E> sequence(@NonNull List<? extends Result<T, E>> results) {
+  static <T, E> Result<List<T>, E> sequence(List<? extends Result<T, E>> results) {
     final List<T> values = new ArrayList<>(results.size());
 
     for (final Result<T, E> result : results) {
@@ -211,7 +209,7 @@ public sealed interface Result<T, E> {
   /// @param results Array of Results to sequence.
   /// @return A Result containing all values or the first error.
   @SafeVarargs
-  static <T, E> Result<List<T>, E> sequence(Result<T, E> @NonNull ... results) {
+  static <T, E> Result<List<T>, E> sequence(Result<T, E>... results) {
     return sequence(List.of(results));
   }
 
@@ -221,7 +219,7 @@ public sealed interface Result<T, E> {
   ///
   /// @param nested The nested Result to flatten.
   /// @return The flattened Result.
-  static <T, E> Result<T, E> flatten(@NonNull Result<Result<T, E>, E> nested) {
+  static <T, E> Result<T, E> flatten(Result<Result<T, E>, E> nested) {
     return switch (nested) {
       case Ok(var inner) -> inner;
       case Err(var err) -> err(err);
@@ -345,7 +343,8 @@ public sealed interface Result<T, E> {
   /// @param onErr The function to apply if this is an `Err`.
   /// @param <R> The type of the resulting value.
   /// @return The result of applying the appropriate function.
-  default <R> R fold(Function<T, R> onOk, Function<E, R> onErr) {
+  default <R> R fold(
+      Function<? super T, ? extends R> onOk, Function<? super E, ? extends R> onErr) {
     return switch (this) {
       case Ok(var val) -> onOk.apply(val);
       case Err(var err) -> onErr.apply(err);
@@ -510,7 +509,7 @@ public sealed interface Result<T, E> {
 
   /// Converts this Result into a Stream.
   ///
-  /// @return A [Stream] containing the value if [Ok]`, or an empty [Stream] if Err.
+  /// @return A [Stream] containing the value if [Ok], or an empty [Stream] if Err.
   default Stream<T> stream() {
     return switch (this) {
       case Ok(var val) -> Stream.of(val);
@@ -535,14 +534,14 @@ public sealed interface Result<T, E> {
   }
 
   /// Represents an `Ok` containing a non-null value.
-  record Ok<T, E>(@NonNull T value) implements Result<T, E> {
+  record Ok<T, E>(T value) implements Result<T, E> {
     public Ok {
       Objects.requireNonNull(value, "Ok value cannot be null");
     }
   }
 
   /// Represents a failed operation containing a domain error.
-  record Err<T, E>(@NonNull E error) implements Result<T, E> {
+  record Err<T, E>(E error) implements Result<T, E> {
     public Err {
       Objects.requireNonNull(error, "Err error cannot be null");
     }

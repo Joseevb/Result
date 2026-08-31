@@ -1,4 +1,4 @@
-package dev.jose.result.utils;
+package dev.jose.result;
 
 import java.util.Map;
 
@@ -9,22 +9,13 @@ import java.util.Map;
 /// Infrastructure adapters may consume this metadata without leaking their own
 /// framework types into the domain model.
 ///
-/// # Example
-/// ```java
-/// public sealed interface UserFailure extends Failure {
-///   record NotFound(long userId) implements UserFailure {
-///     @Override
-///     public String getMessage() {
-///       return "User " + this.userId + " was not found";
-///     }
+/// # Example ```java public sealed interface UserFailure extends Failure {
+/// record NotFound(long userId) implements UserFailure {
+/// @Override public String getMessage() { return "User " + this.userId + " was
+/// not found"; }
 ///
-///     @Override
-///     public Map<String, Object> getExtensions() {
-///       return Map.of("userId", this.userId);
-///     }
-///   }
-/// }
-/// ```
+/// @Override public Map<String, Object> getExtensions() { return
+/// Map.of("userId", this.userId); } } } ```
 public interface Failure {
 
   /// Returns the default human-readable message.
@@ -53,7 +44,10 @@ public interface Failure {
   ///
   /// @return the failure class name converted to upper snake case
   default String getErrorCode() {
-    return this.getClass().getSimpleName().replaceAll("([a-z])([A-Z])", "$1_$2").toUpperCase();
+    return this.getClass()
+        .getSimpleName()
+        .replaceAll("([a-z])([A-Z])", "$1_$2")
+        .toUpperCase(Locale.ROOT);
   }
 
   /// Returns additional presentation metadata.

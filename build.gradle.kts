@@ -34,7 +34,6 @@ subprojects {
     compileOnly(rootProject.libs.jspecify)
 
     // Observability & Logging (compileOnly - users bring their own)
-    compileOnly(rootProject.libs.micrometer.core)
     compileOnly(rootProject.libs.slf4j.api)
 
     // JUnit 6 - unified BOM for all JUnit components

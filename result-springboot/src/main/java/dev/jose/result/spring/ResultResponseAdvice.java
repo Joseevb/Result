@@ -5,7 +5,6 @@ import dev.jose.result.utils.Failure;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.util.Locale;
-import org.jspecify.annotations.NonNull;
 import org.springframework.context.MessageSource;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.ResolvableType;
@@ -34,13 +33,9 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 /// `error.title.<FailureSimpleName>` for title. Missing messages fall back to
 /// [Failure#getMessage()] and [Failure#getTitle()].
 ///
-/// # Configuration
-/// ```java
-/// @Bean
-/// ResultResponseAdvice resultResponseAdvice(MessageSource messageSource) {
-///   return new ResultResponseAdvice(messageSource);
-/// }
-/// ```
+/// # Configuration ```java
+/// @Bean ResultResponseAdvice resultResponseAdvice(MessageSource messageSource)
+/// { return new ResultResponseAdvice(messageSource); } ```
 @RestControllerAdvice
 public class ResultResponseAdvice implements ResponseBodyAdvice<Object> {
 
@@ -57,7 +52,7 @@ public class ResultResponseAdvice implements ResponseBodyAdvice<Object> {
   /// whose declared body type is `Result`.
   @Override
   public boolean supports(
-      MethodParameter returnType, @NonNull Class<? extends HttpMessageConverter<?>> converterType) {
+      MethodParameter returnType, Class<? extends HttpMessageConverter<?>> converterType) {
     final ResolvableType declaredType = ResolvableType.forMethodParameter(returnType);
     if (Result.class.isAssignableFrom(declaredType.toClass())) {
       return true;
@@ -71,16 +66,16 @@ public class ResultResponseAdvice implements ResponseBodyAdvice<Object> {
     return bodyType != null && Result.class.isAssignableFrom(bodyType);
   }
 
-  /// Unwraps an `Ok` or converts an `Err` to `ProblemDetail` before the body is
-  /// serialized.
+  /// Unwraps an `Ok` or converts an `Err` to `ProblemDetail` before the body
+  /// is serialized.
   @Override
   public Object beforeBodyWrite(
       Object body,
-      @NonNull MethodParameter returnType,
-      @NonNull MediaType selectedContentType,
-      @NonNull Class<? extends HttpMessageConverter<?>> selectedConverterType,
-      @NonNull ServerHttpRequest request,
-      @NonNull ServerHttpResponse response) {
+      MethodParameter returnType,
+      MediaType selectedContentType,
+      Class<? extends HttpMessageConverter<?>> selectedConverterType,
+      ServerHttpRequest request,
+      ServerHttpResponse response) {
     if (!(body instanceof Result<?, ?> result)) {
       return body;
     }

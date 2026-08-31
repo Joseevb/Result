@@ -1,4 +1,4 @@
 @NullMarked
-package dev.jose.result.utils;
+package dev.jose.result;
 
 import org.jspecify.annotations.NullMarked;
