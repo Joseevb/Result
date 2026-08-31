@@ -11,7 +11,6 @@ A modern, type-safe Result monad library for Java implementing Railway Oriented 
 `Result` is a library that brings functional error handling to Java. Instead of throwing exceptions, operations return a `Result<T, E>` containing either a success value or a domain error. This library provides:
 
 - A sealed `Result<T, E>` type for synchronous operations with a rich fluent API
-- An async counterpart `AsyncResult<T, E>` for non-blocking Railway Oriented Programming
 - A composable `Validator<T>` for declarative field-level validation
 - A declarative `ErrorRouter<E>` for exception-to-domain-error mapping
 - Spring Boot integration with automatic Result unwrapping and RFC 7807 Problem Details responses
@@ -21,12 +20,11 @@ A modern, type-safe Result monad library for Java implementing Railway Oriented 
 
 - **Type-Safe Error Handling** -- Compile-time verification of all error paths
 - **Railway Oriented Programming** -- Chain operations without explicit error checks at each step
-- **Async-First Design** -- `AsyncResult` supports parallel composition, retries with backoff, and timeouts
 - **Declarative Validation** -- Fluent `Validator` with field-level error collection
 - **Exception Mapping** -- `ErrorRouter` eliminates verbose try-catch-translate patterns
-- **Spring Boot Integration** -- Automatic controller response conversion with RFC 7807 Problem Details, i18n, and metrics
+- **Spring Boot Integration** -- Automatic controller response conversion with RFC 7807 Problem Details and i18n
 - **Observability** -- Built-in Micrometer metrics and SLF4J logging hooks
-- **Zero Core Dependencies** -- Only annotations are compile-only; bring your own SLF4J and Micrometer
+- **Zero Core Dependencies** -- Nullability annotations are compile-only; bring your own SLF4J and Micrometer
 
 ## Requirements
 
@@ -112,7 +110,7 @@ public sealed interface UserError {
 ```java
 public class UserService {
     public Result<User, UserError> findById(Long id) {
-        return Result.attempt(
+        return Result.from(
             () -> repository.findById(id)
                 .orElseThrow(() -> new UserNotFoundException(id)),
             exception -> new UserError.DatabaseError(exception.getMessage())
@@ -125,7 +123,7 @@ public class UserService {
             .matches(User::email, "^[A-Za-z0-9+_.-]+@(.+)$", "email", "Invalid email format")
             .length(User::name, 1, 100, "name")
             .result()
-            .flatMap(validUser -> Result.attempt(
+            .andThen(validUser -> Result.from(
                 () -> repository.save(validUser),
                 ex -> new UserError.DatabaseError(ex.getMessage())
             ));
@@ -138,60 +136,31 @@ public class UserService {
 ```java
 var response = userService.findById(42)
     .map(User::email)
-    .peek(email -> log.info("Found user: {}", email))
-    .flatMap(email -> validateEmail(email))
+    .inspect(email -> log.info("Found user: {}", email))
+    .andThen(email -> validateEmail(email))
     .recover(error -> "guest@example.com")
     .fold(
-        email -> "Success: " + email,
+        email -> "Ok: " + email,
         error -> "Failed: " + error.getMessage()
     );
 ```
-
-## Real-World Recipe: Load User with Orders
-
-This example demonstrates a typical service layer pattern - loading a user, fetching their orders in parallel, and combining the results:
-
-```java
-public AsyncResult<UserProfile, UserError> getUserWithOrders(Long userId) {
-    // Start with fetching user and preferences in parallel
-    return AsyncResult.sequence(List.of(
-            userService.findByIdAsync(userId),
-            preferencesService.getPreferencesAsync(userId)
-        ))
-        .combine(
-            orderService.getRecentOrdersAsync(userId),
-            (results, orders) -> {
-                final User user = results.get(0);
-                final UserPreferences prefs = results.get(1);
-                return new UserProfile(user, prefs, orders);
-            }
-        )
-        .filter(
-            profile -> !profile.orders().isEmpty(),
-            () -> new UserError.NoOrders(userId)
-        )
-        .peekFailure(err -> log.error("Failed to load profile for user {}: {}", userId, err));
-}
-```
-
-### Key Patterns Demonstrated:
-- **`sequence()`** - Parallel execution with fail-fast
-- **`combine()`** - Merge independent results
-- **`filter()`** - Validate business rules
-- **`peekFailure()`** - Logging without breaking the chain
 
 ## API Reference
 
 ### Result<T, E>
 
-The core synchronous result type. Represents a value that is either a success or a domain error.
+The core synchronous result type. It is either an `Ok` value or an `Err` domain error.
+The error type `E` is commonly a sealed domain-error hierarchy.
+
+`Ok` and `Err` reject `null`. For successful operations without a meaningful value, use
+`empty()`, which produces `Result<Unit, E>` containing `Result.Unit.INSTANCE`.
 
 #### Creation
 
 ```java
 // Basic constructors
-Result<User, UserError> success = Result.success(user);
-Result<User, UserError> failure = Result.failure(new UserError.NotFound(id));
+Result<User, UserError> okResult = Result.ok(user);
+Result<User, UserError> errResult = Result.err(new UserError.NotFound(id));
 
 // From Optional
 Result<User, UserError> fromOpt = Result.fromOptional(
@@ -205,37 +174,40 @@ Result<User, UserError> fromNull = Result.ofNullable(
     () -> new UserError.InvalidInput("field", "null not allowed")
 );
 
-// Capture checked exceptions
-Result<User, UserError> captured = Result.attempt(
+// Capture exceptions as Result<T, Exception>
+Result<User, Exception> captured = Result.from(() -> repository.save(user));
+
+// Typed error conversion path
+Result<User, UserError> capturedTyped = Result.from(
     () -> repository.save(user),
     ex -> new UserError.DatabaseError(ex.getMessage())
 );
 
-// For void operations
-Result<Void, UserError> voidOp = Result.empty();
+// For operations without a meaningful value
+Result<Result.Unit, UserError> voidOp = Result.empty();
 ```
 
 #### Transformations
 
 ```java
-// Transform the success value
+// Transform the Ok value
 Result<String, UserError> mapped = result.map(User::email);
 
-// Transform the error
-Result<User, ApiError> apiResult = result.mapError(
+// Transform the Err value
+Result<User, ApiError> apiResult = result.mapErr(
     err -> new ApiError("USER_ERROR", err.getMessage())
 );
 
-// Transform both paths
-Result<UserDTO, ApiError> both = result.mapBoth(
+// Transform both Ok and Err paths
+Result<UserDTO, ApiError> both = result.map(
     user -> new UserDTO(user.id(), user.email()),
     err -> new ApiError("FAIL", err.getMessage())
 );
 
 // Chain operations that return Results
 Result<Boolean, UserError> chained = result
-    .flatMap(user -> validateUser(user))  // returns Result<Boolean, UserError>
-    .flatMap(isValid -> saveIfValid(isValid));
+    .andThen(user -> validateUser(user))  // returns Result<Boolean, UserError>
+    .andThen(isValid -> saveIfValid(isValid));
 
 // Combine two independent Results
 Result<UserProfile, UserError> combined = userResult.combine(
@@ -278,7 +250,7 @@ User user = result.unwrapOr(User.guest());
 User user2 = result.unwrapOrElse(() -> loadFromCache());
 
 // Unsafe extraction (use only in tests)
-User user3 = result.unwrap();  // throws RuntimeException on Failure
+User user3 = result.unwrap();  // throws RuntimeException on Err
 
 // Custom exception mapping
 User user4 = result.unwrapOrThrow(
@@ -293,165 +265,29 @@ Optional<User> opt = result.toOptional();
 #### Side Effects
 
 ```java
-// Peek at success without modifying
+// Inspect an Ok without modifying it
 result
-    .peek(user -> metrics.recordUser(user))
-    .peek(user -> log.info("Loaded user: {}", user.id()));
+    .inspect(user -> metrics.recordUser(user))
+    .inspect(user -> log.info("Loaded user: {}", user.id()));
 
-// Peek at failure
+// Inspect an Err without modifying it
 result
-    .peekFailure(error -> alerting.send("User load failed", error))
-    .peekFailure(error -> log.error("Error: {}", error.getMessage()));
+    .inspectErr(error -> alerting.send("User load failed", error))
+    .inspectErr(error -> log.error("Error: {}", error.getMessage()));
 ```
 
 #### Bulk Operations
 
 ```java
-// Collect results from a stream (short-circuit on first failure)
+// Collect results from a stream (short-circuit on the first Err)
 Stream<Result<User, UserError>> results = userIds.stream()
     .map(repository::findById);
-Result<List<User>, UserError> allUsers = Result.collect(this.results);
+Result<List<User>, UserError> allUsers = Result.collect(results);
 
 // Flatten nested Results
 Result<User, UserError> flat = Result.flatten(
     nestedResult  // Result<Result<User, UserError>, UserError>
 );
-```
-
-### AsyncResult<T, E>
-
-Non-blocking counterpart to `Result`. Represents a computation that will eventually produce a `Result<T, E>`. Supports parallel composition, retries with backoff, and timeouts.
-
-#### Creation
-
-```java
-// From CompletableFuture, catching exceptions
-AsyncResult<User, UserError> userAsync = AsyncResult.attempt(
-    webClient.getUser(id),
-    ex -> switch (ex) {
-        case WebClientResponseException.NotFound _
-            -> new UserError.NotFound(id);
-        case WebClientResponseException.BadRequest _
-            -> new UserError.InvalidInput("request", ex.getMessage());
-        default -> new UserError.DatabaseError(ex.getMessage());
-    }
-);
-
-// From existing CompletableFuture<Result<T, E>>
-AsyncResult<User, UserError> fromFuture = AsyncResult.of(
-    CompletableFuture.completedFuture(Result.success(user))
-);
-
-// From already-completed Result (useful for fallbacks)
-AsyncResult<User, UserError> cached = AsyncResult.completed(
-    Result.success(cachedUser)
-);
-
-// Pre-built success/failure
-AsyncResult<User, UserError> s = AsyncResult.success(user);
-AsyncResult<User, UserError> f = AsyncResult.failure(new UserError.NotFound(id));
-```
-
-#### Chaining
-
-```java
-// Transform the success value
-AsyncResult<String, UserError> email = userAsync.map(User::email);
-
-// Chain async operations
-AsyncResult<Order, UserError> order = userAsync
-    .flatMap(user -> fetchCart(user.id()))      // AsyncResult<Cart, UserError>
-    .flatMap(cart -> createOrder(cart))         // AsyncResult<Order, UserError>
-    .map(Order::withTimestamp);
-
-// Combine two independent async operations (parallel)
-AsyncResult<UserProfile, UserError> profile = userAsync.combine(
-    preferencesAsync,
-    (user, prefs) -> new UserProfile(user, prefs)
-);
-
-// Transform the error
-AsyncResult<User, ApiError> apiAsync = userAsync.mapError(
-    err -> new ApiError("USER_ERROR", err.getMessage())
-);
-```
-
-#### Composition
-
-```java
-// Collect multiple async results in parallel
-List<AsyncResult<Product, ShopError>> fetches = productIds.stream()
-    .map(this::fetchProduct)
-    .toList();
-AsyncResult<List<Product>, ShopError> allProducts = AsyncResult.collectAll(this.fetches);
-
-// Semantic alias - clearer when sequencing operations
-AsyncResult<List<Product>, ShopError> sequenced = AsyncResult.sequence(this.fetches);
-
-// Race multiple async results (first to complete wins)
-AsyncResult<User, UserError> fastest = AsyncResult.race(
-    fetchFromCache(id),
-    fetchFromDatabase(id),
-    fetchFromReplica(id)
-);
-```
-
-#### Resilience
-
-```java
-// Timeout with fallback error
-AsyncResult<User, UserError> timed = userAsync.timeout(
-    Duration.ofSeconds(5),
-    () -> new UserError.DatabaseError("Request timeout")
-);
-
-// Retry with fixed attempts (supply fresh AsyncResult each time)
-AsyncResult<User, UserError> retry3 = AsyncResult.retry(() -> fetchUser(id), 3);
-
-// Retry with exponential backoff
-AsyncResult<User, UserError> resilient = AsyncResult.retryWithBackoff(
-    () -> fetchUser(id),           // Supplier: fresh attempt each time
-    3,                            // max attempts
-    Duration.ofMillis(100)        // initial delay, doubled each retry
-);
-
-// Retry with custom backoff multiplier
-AsyncResult<User, UserError> custom = AsyncResult.retryWithBackoff(
-    () -> fetchUser(id),
-    5,
-    Duration.ofMillis(50),
-    3.0  // triple the delay each time
-);
-
-// Delay execution
-AsyncResult<User, UserError> delayed = AsyncResult.delay(
-    userAsync,
-    Duration.ofSeconds(1)
-);
-```
-
-#### Terminal Operations
-
-```java
-// Block and await (use at application boundaries)
-Result<User, UserError> result = userAsync.join();
-
-// Check completion status
-if (userAsync.isDone()) {
-    // ...
-}
-
-// Convert to CompletableFuture
-CompletableFuture<Result<User, UserError>> future = userAsync.toFuture();
-
-// Cancellation support
-boolean cancelled = userAsync.cancel(true);  // Attempt to cancel running operation
-if (userAsync.isCancelled()) {
-    // Operation was cancelled
-}
-
-// Note: Cancellation is best-effort. Chained operations (map, flatMap, etc.)
-// will complete with CancellationException if upstream is cancelled.
 ```
 
 ### Validator<T>
@@ -556,9 +392,6 @@ Declarative exception-to-domain-error mapper. Eliminates verbose try-catch-trans
 // Define once, reuse everywhere
 Function<Exception, UserError> errorRouter = ErrorRouter
     .defaultsTo(ex -> new UserError.DatabaseError(ex.getMessage()))
-    .withLogging(log)  // optional: log exceptions at WARN
-    .withMetrics(meterRegistry, "user.errors")  // optional: Micrometer metrics
-    .withShadowWarnings()  // optional: warn on shadowing during config
     .map(IllegalArgumentException.class,
         ex -> new UserError.InvalidInput("field", ex.getMessage()))
     .map(DataIntegrityViolationException.class,
@@ -566,8 +399,8 @@ Function<Exception, UserError> errorRouter = ErrorRouter
     .map(TimeoutException.class,
         _ -> new UserError.DatabaseError("Request timeout"));
 
-// Invoke in Result.attempt()
-Result<User, UserError> result = Result.attempt(
+// Invoke in Result.from()
+Result<User, UserError> result = Result.from(
     () -> repository.save(user),
     this.errorRouter
 );
@@ -581,28 +414,17 @@ router.map(IllegalArgumentException.class,
     ex -> new UserError.InvalidInput("input", ex.getMessage())
 );
 
-// Map exception hierarchy (alias for clarity)
-router.mapAll(IOException.class,
+// Exception subclasses are matched by their declared supertype
+router.map(IOException.class,
     ex -> new UserError.DatabaseError(ex.getMessage())
 );
-
-// Map with side effects (logging, alerting)
-router.mapWithEffect(
-    SQLException.class,
-    (ex, error) -> alerting.notifyCritical("Database error", ex),
-    ex -> new UserError.DatabaseError(ex.getMessage())
-);
-
-// Freeze for concurrent use (enables O(1) lookup caching)
-// Recommended for high-throughput scenarios - call after configuration
-router.freeze();
 ```
 
 #### Introspection
 
 ```java
-int mappingCount = router.mappingCount();
-boolean hasMapping = router.hasMappingFor(IllegalArgumentException.class);
+int ruleCount = router.ruleCount();
+boolean hasRule = router.hasRuleFor(IllegalArgumentException.class);
 ```
 
 ## Spring Boot Integration
@@ -615,11 +437,8 @@ Register the `ResultResponseAdvice` bean in your configuration:
 @Configuration
 public class ResultConfig {
     @Bean
-    public ResultResponseAdvice resultAdvice(
-        MessageSource messageSource,
-        MeterRegistry meterRegistry
-    ) {
-        return new ResultResponseAdvice(messageSource, meterRegistry);
+    public ResultResponseAdvice resultAdvice(MessageSource messageSource) {
+        return new ResultResponseAdvice(messageSource);
     }
 }
 ```
@@ -628,10 +447,11 @@ The advice is auto-configured if you depend on `result-springboot` with proper S
 
 ### Define Domain Errors
 
-Implement `BaseFailure` (and optionally `HttpFailure`) for automatic Spring integration:
+Implement the framework-agnostic `Failure` interface for automatic Spring integration. A sealed
+domain-error hierarchy keeps the possible failures explicit:
 
 ```java
-public sealed interface UserFailure extends BaseFailure {
+public sealed interface UserFailure extends Failure {
 
     @ResponseStatus(HttpStatus.NOT_FOUND)
     record NotFound(Long userId) implements UserFailure {
@@ -641,14 +461,18 @@ public sealed interface UserFailure extends BaseFailure {
         }
 
         @Override
+        public String getTitle() {
+            return "Not Found";
+        }
+
+        @Override
         public Map<String, Object> getExtensions() {
             return Map.of("userId", this.userId);
         }
     }
 
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    record ValidationFailed(Map<String, String> errors)
-        implements UserFailure, HttpFailure {
+    record ValidationFailed(Map<String, String> errors) implements UserFailure {
 
         @Override
         public String getMessage() {
@@ -656,32 +480,39 @@ public sealed interface UserFailure extends BaseFailure {
         }
 
         @Override
-        public Optional<ProblemDetail> toProblemDetail(HttpServletRequest request) {
-            return Optional.of(this.createValidationError(this.errors));
+        public String getTitle() {
+            return "Bad Request";
+        }
+
+        @Override
+        public Map<String, Object> getExtensions() {
+            return Map.of("errors", this.errors);
         }
     }
 
     @ResponseStatus(HttpStatus.CONFLICT)
-    record EmailExists(String email) implements UserFailure, HttpFailure {
+    record EmailExists(String email) implements UserFailure {
         @Override
         public String getMessage() {
             return "Email " + this.email + " is already in use";
         }
 
         @Override
-        public Optional<ProblemDetail> toProblemDetail(HttpServletRequest request) {
-            return Optional.of(this.createConflictError(
-                "Email already registered",
-                this.email
-            ));
+        public Map<String, Object> getExtensions() {
+            return Map.of("email", this.email);
         }
     }
 }
 ```
 
+For localization, define `error.<FailureSimpleName>` and optionally
+`error.title.<FailureSimpleName>` message keys. `getMessageArgs()` supplies interpolation values;
+missing keys fall back to `getMessage()` and `getTitle()`.
+
 ### Controller Example
 
-Controllers return `Result` or `AsyncResult` directly. The advice handles unwrapping and response conversion:
+Controllers return `Result<T, E>` directly. `ResponseEntity<Result<T, E>>` is also supported when
+headers or an outer success status are needed. `Result<ResponseEntity<T>, E>` is not treated specially.
 
 ```java
 @RestController
@@ -702,18 +533,8 @@ public class UserController {
             .required(CreateUserRequest::email, "email")
             .matches(CreateUserRequest::email, ".*@.*", "email", "Invalid email")
             .result()
-            .mapError(errors -> new UserFailure.ValidationFailed(errors))
-            .flatMap(validReq -> this.userService.create(validReq))
-            .map(user -> new UserDTO(user.getId(), user.getEmail()));
-    }
-
-    @PutMapping("/{id}")
-    public AsyncResult<UserDTO, UserFailure> updateUser(
-        @PathVariable Long id,
-        @RequestBody UpdateUserRequest req
-    ) {
-        return this.userService.findByIdAsync(id)
-            .flatMap(user -> this.userService.validateAndUpdateAsync(user, req))
+            .mapErr(errors -> new UserFailure.ValidationFailed(errors))
+            .andThen(validReq -> this.userService.create(validReq))
             .map(user -> new UserDTO(user.getId(), user.getEmail()));
     }
 }
