@@ -3,20 +3,23 @@ package dev.jose.result.spring;
 import java.util.Locale;
 import java.util.Map;
 
-/// Framework-agnostic metadata for a domain failure.
+/// # Example
 ///
-/// A sealed domain-error hierarchy commonly extends this interface so that each
-/// failure carries a human-readable message and stable presentation metadata.
-/// Infrastructure adapters may consume this metadata without leaking their own
-/// framework types into the domain model.
+/// ```java
+/// public sealed interface UserFailure extends Failure {
+///   record NotFound(long userId) implements UserFailure {
+///     @Override
+///     public String getMessage() {
+///       return "User " + this.userId + " was not found";
+///     }
 ///
-/// # Example ```java public sealed interface UserFailure extends Failure {
-/// record NotFound(long userId) implements UserFailure {
-/// @Override public String getMessage() { return "User " + this.userId + " was
-/// not found"; }
-///
-/// @Override public Map<String, Object> getExtensions() { return
-/// Map.of("userId", this.userId); } } } ```
+///     @Override
+///     public Map<String, Object> getExtensions() {
+///       return Map.of("userId", this.userId);
+///     }
+///   }
+/// }
+/// ```
 public interface Failure {
 
   /// Returns the default human-readable message.
