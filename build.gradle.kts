@@ -30,7 +30,6 @@ subprojects {
   dependencies {
     // Nullability annotations
     compileOnly(rootProject.libs.jspecify)
-    compileOnly(rootProject.libs.jetbrains.annotations)
 
     // Observability & Logging (compileOnly - users bring their own)
     compileOnly(rootProject.libs.micrometer.core)

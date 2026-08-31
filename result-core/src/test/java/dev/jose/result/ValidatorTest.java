@@ -99,8 +99,8 @@ class ValidatorTest {
 			assertEquals(1, result.errorCount());
 
 			final var r = result.result();
-			assertInstanceOf(Result.Failure.class, r);
-			final Map<String, String> errors = ((Result.Failure<Person, Map<String, String>>) r).error();
+			assertInstanceOf(Result.Err.class, r);
+			final Map<String, String> errors = ((Result.Err<Person, Map<String, String>>) r).error();
 			assertEquals("Must be adult", errors.get("age"));
 		}
 
@@ -117,8 +117,8 @@ class ValidatorTest {
 			assertEquals(1, result.errorCount());
 
 			final var r = result.result();
-			assertInstanceOf(Result.Failure.class, r);
-			final Map<String, ValidationError> errors = ((Result.Failure<Person, Map<String, ValidationError>>) r)
+			assertInstanceOf(Result.Err.class, r);
+			final Map<String, ValidationError> errors = ((Result.Err<Person, Map<String, ValidationError>>) r)
 					.error();
 			assertEquals("AGE_MIN", errors.get("age").code());
 		}
@@ -217,8 +217,8 @@ class ValidatorTest {
 			assertTrue(supplierCalled.get());
 
 			final var r = result.result();
-			assertInstanceOf(Result.Failure.class, r);
-			final Map<String, ValidationError> errors = ((Result.Failure<Person, Map<String, ValidationError>>) r)
+			assertInstanceOf(Result.Err.class, r);
+			final Map<String, ValidationError> errors = ((Result.Err<Person, Map<String, ValidationError>>) r)
 					.error();
 			assertEquals("AGE_MIN", errors.get("age").code());
 		}
@@ -291,8 +291,8 @@ class ValidatorTest {
 			assertTrue(result.hasErrors());
 
 			final var r = result.result();
-			assertInstanceOf(Result.Failure.class, r);
-			final Map<String, String> errors = ((Result.Failure<Person, Map<String, String>>) r).error();
+			assertInstanceOf(Result.Err.class, r);
+			final Map<String, String> errors = ((Result.Err<Person, Map<String, String>>) r).error();
 			assertEquals("Field must not be null", errors.get("name"));
 		}
 
@@ -308,8 +308,8 @@ class ValidatorTest {
 			assertTrue(result.hasErrors());
 
 			final var r = result.result();
-			assertInstanceOf(Result.Failure.class, r);
-			final Map<String, ValidationError> errors = ((Result.Failure<Person, Map<String, ValidationError>>) r)
+			assertInstanceOf(Result.Err.class, r);
+			final Map<String, ValidationError> errors = ((Result.Err<Person, Map<String, ValidationError>>) r)
 					.error();
 			assertEquals("NULL_FIELD", errors.get("name").code());
 		}
@@ -362,8 +362,8 @@ class ValidatorTest {
 			assertTrue(result.hasErrors());
 
 			final var r = result.result();
-			assertInstanceOf(Result.Failure.class, r);
-			final Map<String, String> errors = ((Result.Failure<Person, Map<String, String>>) r).error();
+			assertInstanceOf(Result.Err.class, r);
+			final Map<String, String> errors = ((Result.Err<Person, Map<String, String>>) r).error();
 			assertEquals("Invalid name", errors.get("name"));
 		}
 
@@ -379,8 +379,8 @@ class ValidatorTest {
 			assertTrue(result.hasErrors());
 
 			final var r = result.result();
-			assertInstanceOf(Result.Failure.class, r);
-			final Map<String, ValidationError> errors = ((Result.Failure<Person, Map<String, ValidationError>>) r)
+			assertInstanceOf(Result.Err.class, r);
+			final Map<String, ValidationError> errors = ((Result.Err<Person, Map<String, ValidationError>>) r)
 					.error();
 			assertEquals("INVALID_FORMAT", errors.get("name").code());
 		}
@@ -413,8 +413,8 @@ class ValidatorTest {
 			assertTrue(result.hasErrors());
 
 			final var r = result.result();
-			assertInstanceOf(Result.Failure.class, r);
-			final Map<String, String> errors = ((Result.Failure<Person, Map<String, String>>) r).error();
+			assertInstanceOf(Result.Err.class, r);
+			final Map<String, String> errors = ((Result.Err<Person, Map<String, String>>) r).error();
 			assertEquals("Score out of range", errors.get("score"));
 		}
 
@@ -478,8 +478,8 @@ class ValidatorTest {
 			assertTrue(result.hasErrors());
 
 			final var r = result.result();
-			assertInstanceOf(Result.Failure.class, r);
-			final Map<String, String> errors = ((Result.Failure<Person, Map<String, String>>) r).error();
+			assertInstanceOf(Result.Err.class, r);
+			final Map<String, String> errors = ((Result.Err<Person, Map<String, String>>) r).error();
 			assertEquals("Name length invalid", errors.get("name"));
 		}
 
@@ -512,32 +512,32 @@ class ValidatorTest {
 	class ResultTests {
 
 		@Test
-		@DisplayName("no errors: returns Success wrapping target")
+		@DisplayName("no errors: returns Ok wrapping target")
 		void result_success() {
 			final var person = new Person("John", 30, "john@example.com", 100);
 			final var result = Validator.<Person, String>of(person).result();
 
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertEquals(person, result.unwrap());
 		}
 
 		@Test
-		@DisplayName("has errors: returns Failure with unmodifiable map (String)")
+		@DisplayName("has errors: returns Err with unmodifiable map (String)")
 		void result_failureString() {
 			final var result = Validator.<Person, String>of(new Person("", -5, "invalid", -10))
 					.validate(p -> !p.name().isBlank(), "name", "Name required")
 					.validate(p -> p.age() >= 0, "age", "Age must be positive").result();
 
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 
-			assertInstanceOf(Result.Failure.class, result);
-			final Map<String, String> errors = ((Result.Failure<Person, Map<String, String>>) result).error();
+			assertInstanceOf(Result.Err.class, result);
+			final Map<String, String> errors = ((Result.Err<Person, Map<String, String>>) result).error();
 			assertTrue(errors.containsKey("name"));
 			assertTrue(errors.containsKey("age"));
 		}
 
 		@Test
-		@DisplayName("has errors: returns Failure with unmodifiable map (custom type)")
+		@DisplayName("has errors: returns Err with unmodifiable map (custom type)")
 		void result_failureCustom() {
 			final var result = Validator.<Person, ValidationError>of(new Person("", -5, "invalid", -10))
 					.validate(p -> !p.name().isBlank(), "name",
@@ -546,10 +546,10 @@ class ValidatorTest {
 							new ValidationError("NEGATIVE_AGE", "Age must be positive", Severity.ERROR))
 					.result();
 
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 
-			assertInstanceOf(Result.Failure.class, result);
-			final Map<String, ValidationError> errors = ((Result.Failure<Person, Map<String, ValidationError>>) result)
+			assertInstanceOf(Result.Err.class, result);
+			final Map<String, ValidationError> errors = ((Result.Err<Person, Map<String, ValidationError>>) result)
 					.error();
 			assertEquals("BLANK_NAME", errors.get("name").code());
 			assertEquals("NEGATIVE_AGE", errors.get("age").code());
@@ -562,8 +562,8 @@ class ValidatorTest {
 			final var result = Validator.<Person, String>of(new Person("", 30, "john@example.com", 100))
 					.validate(p -> !p.name().isBlank(), "name", "Name required").result();
 
-			assertInstanceOf(Result.Failure.class, result);
-			final Map<String, String> errors = ((Result.Failure<Person, Map<String, String>>) result).error();
+			assertInstanceOf(Result.Err.class, result);
+			final Map<String, String> errors = ((Result.Err<Person, Map<String, String>>) result).error();
 			assertThrows(UnsupportedOperationException.class, () -> errors.put("extra", "boom"));
 		}
 	}
@@ -575,12 +575,12 @@ class ValidatorTest {
 	class ResultOrTests {
 
 		@Test
-		@DisplayName("no errors: returns Success")
+		@DisplayName("no errors: returns Ok")
 		void resultOr_success() {
 			final var result = Validator.<Person, String>of(new Person("John", 30, "john@example.com", 100))
 					.resultOr(errors -> "Validation failed: " + errors.size());
 
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 		}
 
 		@Test
@@ -590,7 +590,7 @@ class ValidatorTest {
 					.validate(p -> !p.name().isBlank(), "name", "Name required")
 					.resultOr(errors -> "Invalid: " + errors.keySet());
 
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 			assertTrue(result.fold(_ -> "", e -> e).contains("Invalid:"));
 		}
 
@@ -602,7 +602,7 @@ class ValidatorTest {
 							new ValidationError("BLANK", "Name required", Severity.ERROR))
 					.resultOr(Map::size);
 
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 			assertEquals(Integer.valueOf(1), result.fold(_ -> 0, e -> e));
 		}
 	}
@@ -801,7 +801,7 @@ class ValidatorTest {
 					.range(Person::score, 0, 100, "score", "Score invalid");
 
 			assertFalse(validator.hasErrors());
-			assertTrue(validator.result().isSuccess());
+			assertTrue(validator.result().isOk());
 		}
 
 		@Test
@@ -817,8 +817,8 @@ class ValidatorTest {
 			assertEquals(4, validator.errorCount());
 
 			final var r = validator.result();
-			assertInstanceOf(Result.Failure.class, r);
-			final Map<String, String> errors = ((Result.Failure<Person, Map<String, String>>) r).error();
+			assertInstanceOf(Result.Err.class, r);
+			final Map<String, String> errors = ((Result.Err<Person, Map<String, String>>) r).error();
 			assertTrue(errors.containsKey("name"));
 			assertTrue(errors.containsKey("age"));
 			assertTrue(errors.containsKey("email"));
@@ -841,8 +841,8 @@ class ValidatorTest {
 			assertEquals(4, validator.errorCount());
 
 			final var r = validator.result();
-			assertInstanceOf(Result.Failure.class, r);
-			final Map<String, ValidationError> errors = ((Result.Failure<Person, Map<String, ValidationError>>) r)
+			assertInstanceOf(Result.Err.class, r);
+			final Map<String, ValidationError> errors = ((Result.Err<Person, Map<String, ValidationError>>) r)
 					.error();
 			assertTrue(errors.values().stream().allMatch(e -> e.severity() == Severity.ERROR));
 		}

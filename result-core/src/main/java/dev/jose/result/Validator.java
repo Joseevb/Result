@@ -1,6 +1,5 @@
 package dev.jose.result;
 
-import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Arrays;
@@ -76,7 +75,6 @@ public final class Validator<T, E> {
   /// @param <T>    the target type
   /// @param <E>    the error type
   /// @return a new, empty validator for the target
-	@Contract("_ -> new")
 	public static <T, E> @NonNull Validator<T, E> of(T target) {
 		return new Validator<>(target, new HashMap<>());
 	}
@@ -89,7 +87,6 @@ public final class Validator<T, E> {
   /// @param field the field name to associate the error with
   /// @param error the error value
   /// @return a new validator with the error appended
-	@Contract("_, _ -> new")
 	private @NonNull Validator<T, E> withError(@NonNull String field, E error) {
 		final var next = new HashMap<>(this.errors);
 		next.put(field, error);
@@ -114,7 +111,6 @@ public final class Validator<T, E> {
   /// @param errorSupplier  supplier invoked only when validation fails
   /// @return `this` if the predicate passes, otherwise a new validator with the error recorded
   /// @throws NullPointerException if any parameter is null
-	@Contract("_, _, _ -> new")
 	public @NonNull Validator<T, E> validate(@NonNull Predicate<T> condition, @NonNull String field,
 			@NonNull Supplier<E> errorSupplier) {
 		return condition.test(this.target) ? this : this.withError(field, errorSupplier.get());
@@ -139,7 +135,6 @@ public final class Validator<T, E> {
   /// @param error     the error to record if validation fails
   /// @return `this` if the predicate passes, otherwise a new validator with the error recorded
   /// @throws NullPointerException if `condition` or `field` is null
-	@Contract("_, _, _ -> new")
 	public @NonNull Validator<T, E> validate(@NonNull Predicate<T> condition, @NonNull String field, E error) {
 		return condition.test(this.target) ? this : this.withError(field, error);
 	}
@@ -160,7 +155,6 @@ public final class Validator<T, E> {
   /// @param validation the validation block applied when the condition holds
   /// @return the result of `validation` if the condition is true, otherwise `this`
   /// @throws NullPointerException if any parameter is null
-	@Contract("_, _ -> new")
 	public @NonNull Validator<T, E> validateIf(@NonNull Predicate<T> condition,
 			@NonNull UnaryOperator<Validator<T, E>> validation) {
 		return condition.test(this.target) ? validation.apply(this) : this;
@@ -178,7 +172,6 @@ public final class Validator<T, E> {
   /// @param <U>       the field type
   /// @return `this` if the field is non-null, otherwise a new validator with the error recorded
   /// @throws NullPointerException if `extractor` or `field` is null
-	@Contract("_, _, _ -> new")
 	public <U> @NonNull Validator<T, E> nonNull(@NonNull Function<T, U> extractor, @NonNull String field, E error) {
 		return this.validate(t -> extractor.apply(t) != null, field, error);
 	}
@@ -202,7 +195,6 @@ public final class Validator<T, E> {
   /// @param error     the error to record if validation fails
   /// @return `this` if the pattern matches, otherwise a new validator with the error recorded
   /// @throws NullPointerException if any parameter is null
-	@Contract("_, _, _, _ -> new")
 	public @NonNull Validator<T, E> matches(@NonNull Function<T, String> extractor, @NonNull String pattern,
 			@NonNull String field, E error) {
 		return this.validate(t -> {
@@ -227,7 +219,6 @@ public final class Validator<T, E> {
   /// @param <N>       a numeric type extending [Number]
   /// @return `this` if the value is in range, otherwise a new validator with the error recorded
   /// @throws NullPointerException if any parameter is null
-	@Contract("_, _, _, _, _ -> new")
 	public <N extends Number> @NonNull Validator<T, E> range(@NonNull Function<T, N> extractor, double min, double max,
 			@NonNull String field, E error) {
 		return this.validate(t -> {
@@ -254,7 +245,6 @@ public final class Validator<T, E> {
   /// @param error     the error to record if validation fails
   /// @return `this` if the length is in bounds, otherwise a new validator with the error recorded
   /// @throws NullPointerException if any parameter is null
-	@Contract("_, _, _, _, _ -> new")
 	public @NonNull Validator<T, E> length(@NonNull Function<T, String> extractor, int min, int max,
 			@NonNull String field, E error) {
 		return this.validate(t -> {
@@ -268,17 +258,16 @@ public final class Validator<T, E> {
 
 	/// Returns the validation result as a [Result].
   ///
-  /// - **No errors** → `Result.success(target)`
-  /// - **Errors present** → `Result.failure(errors)` with an **unmodifiable** `Map<String, E>`
+  /// - **No errors** → `Result.ok(target)`
+  /// - **Errors present** → `Result.err(errors)` with an **unmodifiable** `Map<String, E>`
   ///
   /// ```java
 	/// Result<User, Map<String, ValidationError>> result = validator.result();
 	/// ```
   ///
   /// @return a `Result` containing either the valid target or the accumulated error map
-	@Contract(" -> new")
 	public @NonNull Result<T, Map<String, E>> result() {
-		return this.errors.isEmpty() ? Result.success(this.target) : Result.failure(Map.copyOf(this.errors));
+		return this.errors.isEmpty() ? Result.ok(this.target) : Result.err(Map.copyOf(this.errors));
 	}
 
 	/// Returns the validation result with the error map transformed by a custom mapper.
@@ -296,17 +285,15 @@ public final class Validator<T, E> {
   /// @param <F>         the final error type
   /// @return a `Result` wrapping either the valid target or the mapped error
   /// @throws NullPointerException if `errorMapper` is null
-	@Contract("_ -> new")
 	public <F> @NonNull Result<T, F> resultOr(@NonNull Function<Map<String, E>, F> errorMapper) {
 		return this.errors.isEmpty()
-				? Result.success(this.target)
-				: Result.failure(errorMapper.apply(Map.copyOf(this.errors)));
+				? Result.ok(this.target)
+				: Result.err(errorMapper.apply(Map.copyOf(this.errors)));
 	}
 
 	/// Returns `true` if at least one validation has failed.
   ///
   /// @return `true` when the error map is non-empty
-	@Contract(pure = true)
 	public boolean hasErrors() {
 		return !this.errors.isEmpty();
 	}
@@ -314,7 +301,6 @@ public final class Validator<T, E> {
 	/// Returns the number of accumulated validation errors.
   ///
   /// @return the error count
-	@Contract(pure = true)
 	public int errorCount() {
 		return this.errors.size();
 	}
@@ -322,7 +308,6 @@ public final class Validator<T, E> {
 	/// Returns an unmodifiable view of the current error map.
   ///
   /// @return the error map; never null, may be empty
-	@Contract(pure = true)
 	public @NonNull Map<String, E> errors() {
 		return Collections.unmodifiableMap(this.errors);
 	}

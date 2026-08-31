@@ -15,7 +15,6 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -27,6 +26,7 @@ class ResultTest {
 	sealed interface TestError permits TestError.NotFound, TestError.Invalid {
 		record NotFound(String id) implements TestError {
 		}
+
 		record Invalid(String field) implements TestError {
 		}
 	}
@@ -34,63 +34,67 @@ class ResultTest {
 	record User(String id, String name, int age) {
 	}
 
-	// ==================== Static Factory: success() ====================
+	// ==================== Static Factory: ok() ====================
 
 	@Nested
-	@DisplayName("Result.success()")
+	@DisplayName("Result.ok()")
 	class SuccessTests {
 
 		@Test
-		@DisplayName("creates Success with non-null value")
+		@DisplayName("creates Ok with non-null value")
 		void success_withNonNullValue() {
-			final Result<User, TestError> result = Result.success(new User("1", "John", 30));
-			assertTrue(result.isSuccess());
-			assertFalse(result.isFailure());
+			final Result<User, TestError> result = Result.ok(new User("1", "John", 30));
+			assertTrue(result.isOk());
+			assertFalse(result.isErr());
 			assertEquals("John", result.unwrap().name());
 		}
 
 		@Test
-		@DisplayName("creates Success with null value")
+		@DisplayName("rejects a null value")
 		void success_withNullValue() {
-			final Result<String, TestError> result = Result.success(null);
-			assertTrue(result.isSuccess());
-			assertNull(result.unwrap());
+			assertThrows(NullPointerException.class, () -> Result.ok(null));
 		}
 
 		@Test
-		@DisplayName("creates Success with different types")
+		@DisplayName("creates Ok with different types")
 		void success_withDifferentTypes() {
-			final Result<Integer, TestError> intResult = Result.success(42);
-			final Result<List<String>, TestError> listResult = Result.success(List.of("a", "b"));
-			final Result<Void, TestError> voidResult = Result.success(null);
+			final Result<Integer, TestError> intResult = Result.ok(42);
+			final Result<List<String>, TestError> listResult = Result.ok(List.of("a", "b"));
+			final Result<Result.Unit, TestError> emptyResult = Result.empty();
 
 			assertEquals(42, intResult.unwrap());
 			assertEquals(List.of("a", "b"), listResult.unwrap());
-			assertNull(voidResult.unwrap());
+			assertSame(Result.Unit.INSTANCE, emptyResult.unwrap());
 		}
 	}
 
-	// ==================== Static Factory: failure() ====================
+	// ==================== Static Factory: err() ====================
 
 	@Nested
-	@DisplayName("Result.failure()")
+	@DisplayName("Result.err()")
 	class FailureTests {
 
 		@Test
-		@DisplayName("creates Failure with error")
+		@DisplayName("creates Err with error")
 		void failure_createsFailure() {
-			final Result<User, TestError> result = Result.failure(new TestError.NotFound("123"));
-			assertFalse(result.isSuccess());
-			assertTrue(result.isFailure());
+			final Result<User, TestError> result = Result.err(new TestError.NotFound("123"));
+			assertFalse(result.isOk());
+			assertTrue(result.isErr());
 			assertThrows(RuntimeException.class, result::unwrap);
 		}
 
 		@Test
 		@DisplayName("failure propagates through transformations")
 		void failure_propagatesThroughTransformations() {
-			final Result<User, TestError> original = Result.failure(new TestError.NotFound("1"));
+			final Result<User, TestError> original = Result.err(new TestError.NotFound("1"));
 			final Result<String, TestError> mapped = original.map(User::name);
-			assertTrue(mapped.isFailure());
+			assertTrue(mapped.isErr());
+		}
+
+		@Test
+		@DisplayName("rejects a null error")
+		void failure_withNullError() {
+			assertThrows(NullPointerException.class, () -> Result.err(null));
 		}
 	}
 
@@ -101,22 +105,22 @@ class ResultTest {
 	class OfNullableTests {
 
 		@Test
-		@DisplayName("non-null value creates Success")
+		@DisplayName("non-null value creates Ok")
 		void ofNullable_nonNullValue() {
 			final Result<String, TestError> result = Result.ofNullable("hello", () -> new TestError.Invalid("field"));
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertEquals("hello", result.unwrap());
 		}
 
 		@Test
-		@DisplayName("null value creates Failure")
+		@DisplayName("null value creates Err")
 		void ofNullable_nullValue() {
 			final AtomicBoolean supplierCalled = new AtomicBoolean(false);
 			final Result<String, TestError> result = Result.ofNullable(null, () -> {
 				supplierCalled.set(true);
 				return new TestError.Invalid("field");
 			});
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 			assertTrue(supplierCalled.get());
 		}
 
@@ -139,66 +143,102 @@ class ResultTest {
 	class EmptyTests {
 
 		@Test
-		@DisplayName("returns Success containing null")
+		@DisplayName("returns Ok containing Unit.INSTANCE")
 		void empty_returnsSuccessNull() {
-			final Result<Void, TestError> result = Result.empty();
-			assertTrue(result.isSuccess());
-			assertNull(result.unwrap());
+			final Result<Result.Unit, TestError> result = Result.empty();
+			assertTrue(result.isOk());
+			assertSame(Result.Unit.INSTANCE, result.unwrap());
 		}
 
 		@Test
-		@DisplayName("works as void operation")
+		@DisplayName("works with stream and transformations")
 		void empty_worksAsVoid() {
-			final Result<Void, TestError> result = Result.<TestError>empty().map(_ -> {
-				System.out.println("side effect");
-				return null;
-			});
-			assertTrue(result.isSuccess());
+			final Result<Result.Unit, TestError> empty = Result.empty();
+			assertEquals(List.of(Result.Unit.INSTANCE), empty.stream().toList());
+
+			final Result<String, TestError> mapped = empty.map(_ -> "done");
+			assertEquals("done", mapped.unwrap());
 		}
 	}
 
-	// ==================== Static Factory: attempt() ====================
+	// ==================== Static Factory: from() ====================
 
 	@Nested
-	@DisplayName("Result.attempt()")
-	class AttemptTests {
+	@DisplayName("Result.from()")
+	class FromTests {
 
 		@Test
-		@DisplayName("success case returns Success")
-		void attempt_success() {
-			final Result<String, TestError> result = Result.attempt(() -> "hello", _ -> new TestError.Invalid("error"));
-			assertTrue(result.isSuccess());
+		@DisplayName("success case returns Ok")
+		void from_success() {
+			final Result<String, TestError> result = Result.from(() -> "hello", _ -> new TestError.Invalid("error"));
+			assertTrue(result.isOk());
 			assertEquals("hello", result.unwrap());
 		}
 
 		@Test
-		@DisplayName("unchecked exception returns Failure")
-		void attempt_uncheckedException() {
-			final Result<String, TestError> result = Result.attempt(() -> {
+		@DisplayName("unchecked exception returns Err")
+		void from_uncheckedException() {
+			final Result<String, TestError> result = Result.from(() -> {
 				throw new IllegalArgumentException("bad input");
 			}, e -> new TestError.Invalid(e.getMessage()));
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 		}
 
 		@Test
-		@DisplayName("checked exception returns Failure")
-		void attempt_checkedException() {
-			final Result<String, TestError> result = Result.attempt(() -> {
+		@DisplayName("checked exception returns Err")
+		void from_checkedException() {
+			final Result<String, TestError> result = Result.from(() -> {
 				throw new IOException("file not found");
 			}, e -> new TestError.Invalid(e.getMessage()));
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 		}
 
 		@Test
 		@DisplayName("exception mapper receives correct exception type")
-		void attempt_exceptionMapperReceivesCorrectType() {
-			final Result<String, TestError> result = Result.attempt(() -> {
+		void from_exceptionMapperReceivesCorrectType() {
+			final Result<String, TestError> result = Result.from(() -> {
 				throw new IllegalArgumentException("test");
 			}, e -> {
 				assertInstanceOf(IllegalArgumentException.class, e);
 				return new TestError.Invalid(e.getClass().getSimpleName());
 			});
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
+		}
+
+		@Test
+		@DisplayName("captures Exception without an error mapper")
+		void from_capturesException() {
+			final Result<String, Exception> result = Result.from(() -> {
+				throw new IOException("file not found");
+			});
+
+			assertTrue(result.isErr());
+			assertInstanceOf(IOException.class, assertInstanceOf(Result.Err.class, result).error());
+		}
+
+		@Test
+		@DisplayName("does not catch Error")
+		void from_doesNotCatchError() {
+			final AssertionError error = new AssertionError("fatal");
+			final AssertionError thrown = assertThrows(AssertionError.class, () -> Result.from(() -> {
+				throw error;
+			}));
+
+			assertSame(error, thrown);
+		}
+
+		@Test
+		@DisplayName("rejects a null supplied value")
+		void from_rejectsNullValue() {
+			assertThrows(NullPointerException.class, () -> Result.from(() -> null));
+		}
+
+		@Test
+		@DisplayName("rejects a null mapped error")
+		void from_rejectsNullMappedError() {
+			assertThrows(NullPointerException.class, () -> Result.from(() -> {
+				throw new IOException("file not found");
+			}, _ -> null));
 		}
 	}
 
@@ -209,20 +249,20 @@ class ResultTest {
 	class FromOptionalTests {
 
 		@Test
-		@DisplayName("Optional.of(value) returns Success")
+		@DisplayName("Optional.of(value) returns Ok")
 		void fromOptional_withValue() {
 			final Result<String, TestError> result = Result.fromOptional(Optional.of("hello"),
 					() -> new TestError.NotFound("default"));
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertEquals("hello", result.unwrap());
 		}
 
 		@Test
-		@DisplayName("Optional.empty() returns Failure")
+		@DisplayName("Optional.empty() returns Err")
 		void fromOptional_empty() {
 			final Result<String, TestError> result = Result.fromOptional(Optional.empty(),
 					() -> new TestError.NotFound("id"));
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 		}
 
 		@Test
@@ -249,51 +289,51 @@ class ResultTest {
 	class CollectTests {
 
 		@Test
-		@DisplayName("all Success returns Success with collected values")
+		@DisplayName("all Ok returns Ok with collected values")
 		void collect_allSuccess() {
-			final Stream<Result<Integer, TestError>> stream = Stream.of(Result.success(1), Result.success(2),
-					Result.success(3));
+			final Stream<Result<Integer, TestError>> stream = Stream.of(Result.ok(1), Result.ok(2),
+					Result.ok(3));
 			final Result<List<Integer>, TestError> result = Result.collect(stream);
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertEquals(List.of(1, 2, 3), result.unwrap());
 		}
 
 		@Test
-		@DisplayName("first Failure short-circuits")
+		@DisplayName("first Err short-circuits")
 		void collect_shortCircuitsOnFirstFailure() {
 			// Just verify short-circuit behavior works by checking failure is returned
 			final Result<List<Integer>, TestError> result = Result.collect(
-					Stream.of(Result.success(1), Result.failure(new TestError.Invalid("error")), Result.success(3)));
-			assertTrue(result.isFailure());
+					Stream.of(Result.ok(1), Result.err(new TestError.Invalid("error")), Result.ok(3)));
+			assertTrue(result.isErr());
 		}
 
 		@Test
-		@DisplayName("empty stream returns Success with empty collection")
+		@DisplayName("empty stream returns Ok with empty collection")
 		void collect_emptyStream() {
 			final Stream<Result<Integer, TestError>> stream = Stream.empty();
 			final Result<List<Integer>, TestError> result = Result.collect(stream);
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertTrue(result.unwrap().isEmpty());
 		}
 
 		@Test
 		@DisplayName("custom Collector (toSet)")
 		void collect_customCollector() {
-			final Stream<Result<Integer, TestError>> stream = Stream.of(Result.success(1), Result.success(2),
-					Result.success(3));
+			final Stream<Result<Integer, TestError>> stream = Stream.of(Result.ok(1), Result.ok(2),
+					Result.ok(3));
 			final Result<Set<Integer>, TestError> result = Result.collect(stream, Collectors.toSet());
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertEquals(Set.of(1, 2, 3), result.unwrap());
 		}
 
 		@Test
-		@DisplayName("Failure at different positions")
+		@DisplayName("Err at different positions")
 		void collect_failureAtDifferentPositions() {
-			assertTrue(Result.collect(Stream.of(Result.failure(new TestError.NotFound("1")), Result.success(2)))
-					.isFailure());
+			assertTrue(Result.collect(Stream.of(Result.err(new TestError.NotFound("1")), Result.ok(2)))
+					.isErr());
 
-			assertTrue(Result.collect(Stream.of(Result.success(1), Result.failure(new TestError.NotFound("2"))))
-					.isFailure());
+			assertTrue(Result.collect(Stream.of(Result.ok(1), Result.err(new TestError.NotFound("2"))))
+					.isErr());
 		}
 	}
 
@@ -306,9 +346,9 @@ class ResultTest {
 		@Test
 		@DisplayName("collects into List")
 		void collectList() {
-			final Stream<Result<String, TestError>> stream = Stream.of(Result.success("a"), Result.success("b"));
+			final Stream<Result<String, TestError>> stream = Stream.of(Result.ok("a"), Result.ok("b"));
 			final Result<List<String>, TestError> result = Result.collect(stream);
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertEquals(List.of("a", "b"), result.unwrap());
 		}
 	}
@@ -320,48 +360,48 @@ class ResultTest {
 	class SequenceTests {
 
 		@Test
-		@DisplayName("all Success returns list in order")
+		@DisplayName("all Ok returns list in order")
 		void sequence_allSuccess() {
-			final List<Result<Integer, TestError>> list = List.of(Result.success(1), Result.success(2),
-					Result.success(3));
+			final List<Result<Integer, TestError>> list = List.of(Result.ok(1), Result.ok(2),
+					Result.ok(3));
 			final Result<List<Integer>, TestError> result = Result.sequence(list);
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertEquals(List.of(1, 2, 3), result.unwrap());
 		}
 
 		@Test
-		@DisplayName("Failure at first position")
+		@DisplayName("Err at first position")
 		void sequence_failureAtFirst() {
-			final List<Result<Integer, TestError>> list = List.of(Result.failure(new TestError.NotFound("1")),
-					Result.success(2), Result.success(3));
+			final List<Result<Integer, TestError>> list = List.of(Result.err(new TestError.NotFound("1")),
+					Result.ok(2), Result.ok(3));
 			final Result<List<Integer>, TestError> result = Result.sequence(list);
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 		}
 
 		@Test
-		@DisplayName("Failure at middle position")
+		@DisplayName("Err at middle position")
 		void sequence_failureAtMiddle() {
-			final List<Result<Integer, TestError>> list = List.of(Result.success(1),
-					Result.failure(new TestError.Invalid("2")), Result.success(3));
+			final List<Result<Integer, TestError>> list = List.of(Result.ok(1),
+					Result.err(new TestError.Invalid("2")), Result.ok(3));
 			final Result<List<Integer>, TestError> result = Result.sequence(list);
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 		}
 
 		@Test
-		@DisplayName("Failure at last position")
+		@DisplayName("Err at last position")
 		void sequence_failureAtLast() {
-			final List<Result<Integer, TestError>> list = List.of(Result.success(1), Result.success(2),
-					Result.failure(new TestError.NotFound("3")));
+			final List<Result<Integer, TestError>> list = List.of(Result.ok(1), Result.ok(2),
+					Result.err(new TestError.NotFound("3")));
 			final Result<List<Integer>, TestError> result = Result.sequence(list);
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 		}
 
 		@Test
-		@DisplayName("empty list returns Success with empty list")
+		@DisplayName("empty list returns Ok with empty list")
 		void sequence_emptyList() {
 			final List<Result<Integer, TestError>> list = List.of();
 			final Result<List<Integer>, TestError> result = Result.sequence(list);
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertTrue(result.unwrap().isEmpty());
 		}
 
@@ -369,24 +409,24 @@ class ResultTest {
 		@DisplayName("varargs: zero args")
 		void sequence_varargsZeroArgs() {
 			final Result<List<Integer>, TestError> result = Result.sequence();
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertTrue(result.unwrap().isEmpty());
 		}
 
 		@Test
 		@DisplayName("varargs: single element")
 		void sequence_varargsSingleElement() {
-			final Result<List<Integer>, TestError> result = Result.sequence(Result.success(42));
-			assertTrue(result.isSuccess());
+			final Result<List<Integer>, TestError> result = Result.sequence(Result.ok(42));
+			assertTrue(result.isOk());
 			assertEquals(List.of(42), result.unwrap());
 		}
 
 		@Test
 		@DisplayName("varargs: multiple elements")
 		void sequence_varargsMultiple() {
-			final Result<List<Integer>, TestError> result = Result.sequence(Result.success(1), Result.success(2),
-					Result.success(3));
-			assertTrue(result.isSuccess());
+			final Result<List<Integer>, TestError> result = Result.sequence(Result.ok(1), Result.ok(2),
+					Result.ok(3));
+			assertTrue(result.isOk());
 			assertEquals(List.of(1, 2, 3), result.unwrap());
 		}
 	}
@@ -398,29 +438,29 @@ class ResultTest {
 	class FlattenTests {
 
 		@Test
-		@DisplayName("nested Success unwraps to Success")
+		@DisplayName("nested Ok unwraps to Ok")
 		void flatten_nestedSuccess() {
-			final Result<Result<Integer, TestError>, TestError> nested = Result.success(Result.success(42));
+			final Result<Result<Integer, TestError>, TestError> nested = Result.ok(Result.ok(42));
 			final Result<Integer, TestError> result = Result.flatten(nested);
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertEquals(42, result.unwrap());
 		}
 
 		@Test
-		@DisplayName("nested Failure returns Failure")
+		@DisplayName("nested Err returns Err")
 		void flatten_nestedFailure() {
 			final Result<Result<Integer, TestError>, TestError> nested = Result
-					.success(Result.failure(new TestError.NotFound("1")));
+					.ok(Result.err(new TestError.NotFound("1")));
 			final Result<Integer, TestError> result = Result.flatten(nested);
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 		}
 
 		@Test
-		@DisplayName("outer Failure returns Failure")
+		@DisplayName("outer Err returns Err")
 		void flatten_outerFailure() {
-			final Result<Result<Integer, TestError>, TestError> nested = Result.failure(new TestError.Invalid("outer"));
+			final Result<Result<Integer, TestError>, TestError> nested = Result.err(new TestError.Invalid("outer"));
 			final Result<Integer, TestError> result = Result.flatten(nested);
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 		}
 	}
 
@@ -431,119 +471,140 @@ class ResultTest {
 	class MapTests {
 
 		@Test
-		@DisplayName("Success: function applied, new type")
+		@DisplayName("Ok: function applied, new type")
 		void map_success() {
-			final Result<User, TestError> original = Result.success(new User("1", "John", 30));
+			final Result<User, TestError> original = Result.ok(new User("1", "John", 30));
 			final Result<String, TestError> result = original.map(User::name);
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertEquals("John", result.unwrap());
 		}
 
 		@Test
-		@DisplayName("Success: function not called on Failure")
+		@DisplayName("Ok: function not called on Err")
 		void map_failure() {
-			final Result<User, TestError> original = Result.failure(new TestError.NotFound("1"));
+			final Result<User, TestError> original = Result.err(new TestError.NotFound("1"));
 			final AtomicBoolean called = new AtomicBoolean(false);
 			final Result<String, TestError> result = original.map(u -> {
 				called.set(true);
 				return u.name();
 			});
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 			assertFalse(called.get());
 		}
 
 		@Test
 		@DisplayName("transforms to different type")
 		void map_differentType() {
-			final Result<Integer, TestError> original = Result.success(10);
+			final Result<Integer, TestError> original = Result.ok(10);
 			final Result<String, TestError> result = original.map(i -> "number-" + i);
 			assertEquals("number-10", result.unwrap());
 		}
+
+		@Test
+		@DisplayName("Ok: rejects a null mapped value")
+		void map_rejectsNullValue() {
+			final Result<Integer, TestError> original = Result.ok(10);
+			assertThrows(NullPointerException.class, () -> original.map(_ -> null));
+		}
 	}
 
-	// ==================== Transformation: mapError() ====================
+	// ==================== Transformation: mapErr() ====================
 
 	@Nested
-	@DisplayName("Result.mapError()")
+	@DisplayName("Result.mapErr()")
 	class MapErrorTests {
 
 		@Test
-		@DisplayName("Failure: error transformed")
+		@DisplayName("Err: error transformed")
 		void mapError_failure() {
-			final Result<User, TestError> original = Result.failure(new TestError.NotFound("123"));
-			final Result<User, String> result = original.mapError(Object::toString);
-			assertTrue(result.isFailure());
+			final Result<User, TestError> original = Result.err(new TestError.NotFound("123"));
+			final Result<User, String> result = original.mapErr(Object::toString);
+			assertTrue(result.isErr());
 		}
 
 		@Test
-		@DisplayName("Success: unchanged")
+		@DisplayName("Ok: unchanged")
 		void mapError_success() {
-			final Result<User, TestError> original = Result.success(new User("1", "John", 30));
-			final Result<User, String> result = original.mapError(Object::toString);
-			assertTrue(result.isSuccess());
+			final Result<User, TestError> original = Result.ok(new User("1", "John", 30));
+			final Result<User, String> result = original.mapErr(Object::toString);
+			assertTrue(result.isOk());
 			assertEquals("John", result.unwrap().name());
+		}
+
+		@Test
+		@DisplayName("Err: rejects a null mapped error")
+		void mapError_rejectsNullError() {
+			final Result<User, TestError> original = Result.err(new TestError.NotFound("123"));
+			assertThrows(NullPointerException.class, () -> original.mapErr(_ -> null));
 		}
 	}
 
-	// ==================== Transformation: mapBoth() ====================
+	// ==================== Transformation: map() both paths ====================
 
 	@Nested
-	@DisplayName("Result.mapBoth()")
+	@DisplayName("Result.map() with both mappers")
 	class MapBothTests {
 
 		@Test
-		@DisplayName("Success: successMapper applied")
-		void mapBoth_success() {
-			final Result<Integer, TestError> original = Result.success(10);
-			final Result<String, String> result = original.mapBoth(i -> "success-" + i, e -> "error-" + e);
-			assertTrue(result.isSuccess());
+		@DisplayName("Ok: okMapper applied")
+		void map_both_success() {
+			final Result<Integer, TestError> original = Result.ok(10);
+			final Result<String, String> result = original.map(i -> "success-" + i, e -> "error-" + e);
+			assertTrue(result.isOk());
 			assertEquals("success-10", result.unwrap());
 		}
 
 		@Test
-		@DisplayName("Failure: failureMapper applied")
-		void mapBoth_failure() {
-			final Result<Integer, TestError> original = Result.failure(new TestError.NotFound("1"));
-			final Result<String, String> result = original.mapBoth(i -> "success-" + i, e -> "error-" + e);
-			assertTrue(result.isFailure());
+		@DisplayName("Err: errMapper applied")
+		void map_both_failure() {
+			final Result<Integer, TestError> original = Result.err(new TestError.NotFound("1"));
+			final Result<String, String> result = original.map(i -> "success-" + i, e -> "error-" + e);
+			assertTrue(result.isErr());
 		}
 	}
 
-	// ==================== Transformation: flatMap() ====================
+	// ==================== Transformation: andThen() ====================
 
 	@Nested
-	@DisplayName("Result.flatMap()")
+	@DisplayName("Result.andThen()")
 	class FlatMapTests {
 
 		@Test
-		@DisplayName("Success: mapper returns Result, flattened")
+		@DisplayName("Ok: mapper returns Result, flattened")
 		void flatMap_success() {
-			final Result<User, TestError> original = Result.success(new User("1", "John", 30));
-			final Result<String, TestError> result = original.flatMap(u -> Result.success(u.name().toUpperCase()));
-			assertTrue(result.isSuccess());
+			final Result<User, TestError> original = Result.ok(new User("1", "John", 30));
+			final Result<String, TestError> result = original.andThen(u -> Result.ok(u.name().toUpperCase()));
+			assertTrue(result.isOk());
 			assertEquals("JOHN", result.unwrap());
 		}
 
 		@Test
-		@DisplayName("Success: mapper not called on Failure")
+		@DisplayName("Ok: mapper not called on Err")
 		void flatMap_failure() {
-			final Result<User, TestError> original = Result.failure(new TestError.NotFound("1"));
+			final Result<User, TestError> original = Result.err(new TestError.NotFound("1"));
 			final AtomicBoolean called = new AtomicBoolean(false);
-			final Result<String, TestError> result = original.flatMap(u -> {
+			final Result<String, TestError> result = original.andThen(u -> {
 				called.set(true);
-				return Result.success(u.name());
+				return Result.ok(u.name());
 			});
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 			assertFalse(called.get());
 		}
 
 		@Test
-		@DisplayName("Success: mapper returning Failure propagates")
+		@DisplayName("Ok: mapper returning Err propagates")
 		void flatMap_mapperReturnsFailure() {
-			final Result<User, TestError> original = Result.success(new User("1", "John", 30));
+			final Result<User, TestError> original = Result.ok(new User("1", "John", 30));
 			final Result<String, TestError> result = original
-					.flatMap(_ -> Result.failure(new TestError.Invalid("name")));
-			assertTrue(result.isFailure());
+					.andThen(_ -> Result.err(new TestError.Invalid("name")));
+			assertTrue(result.isErr());
+		}
+
+		@Test
+		@DisplayName("Ok: rejects a null Result from the mapper")
+		void flatMap_rejectsNullResult() {
+			final Result<User, TestError> original = Result.ok(new User("1", "John", 30));
+			assertThrows(NullPointerException.class, () -> original.andThen(_ -> null));
 		}
 	}
 
@@ -554,40 +615,40 @@ class ResultTest {
 	class CombineTests {
 
 		@Test
-		@DisplayName("both Success: combiner applied")
+		@DisplayName("both Ok: combiner applied")
 		void combine_bothSuccess() {
-			final Result<Integer, TestError> a = Result.success(10);
-			final Result<Integer, TestError> b = Result.success(20);
+			final Result<Integer, TestError> a = Result.ok(10);
+			final Result<Integer, TestError> b = Result.ok(20);
 			final Result<Integer, TestError> result = a.combine(b, Integer::sum);
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertEquals(30, result.unwrap());
 		}
 
 		@Test
-		@DisplayName("first Failure: returns first Failure")
+		@DisplayName("first Err: returns first Err")
 		void combine_firstFailure() {
-			final Result<Integer, TestError> a = Result.failure(new TestError.NotFound("1"));
-			final Result<Integer, TestError> b = Result.success(20);
+			final Result<Integer, TestError> a = Result.err(new TestError.NotFound("1"));
+			final Result<Integer, TestError> b = Result.ok(20);
 			final Result<Integer, TestError> result = a.combine(b, Integer::sum);
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 		}
 
 		@Test
-		@DisplayName("second Failure: returns second Failure")
+		@DisplayName("second Err: returns second Err")
 		void combine_secondFailure() {
-			final Result<Integer, TestError> a = Result.success(10);
-			final Result<Integer, TestError> b = Result.failure(new TestError.NotFound("2"));
+			final Result<Integer, TestError> a = Result.ok(10);
+			final Result<Integer, TestError> b = Result.err(new TestError.NotFound("2"));
 			final Result<Integer, TestError> result = a.combine(b, Integer::sum);
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 		}
 
 		@Test
 		@DisplayName("combines different types")
 		void combine_differentTypes() {
-			final Result<String, TestError> a = Result.success("Hello");
-			final Result<Integer, TestError> b = Result.success(5);
+			final Result<String, TestError> a = Result.ok("Hello");
+			final Result<Integer, TestError> b = Result.ok(5);
 			final Result<String, TestError> result = a.combine(b, (s, i) -> s + " x" + i);
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertEquals("Hello x5", result.unwrap());
 		}
 	}
@@ -599,21 +660,28 @@ class ResultTest {
 	class RecoverTests {
 
 		@Test
-		@DisplayName("Success: returns unchanged")
+		@DisplayName("Ok: returns unchanged")
 		void recover_success() {
-			final Result<User, TestError> original = Result.success(new User("1", "John", 30));
+			final Result<User, TestError> original = Result.ok(new User("1", "John", 30));
 			final Result<User, TestError> result = original.recover(_ -> new User("0", "Guest", 0));
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertEquals("John", result.unwrap().name());
 		}
 
 		@Test
-		@DisplayName("Failure: applies recovery function")
+		@DisplayName("Err: applies recovery function")
 		void recover_failure() {
-			final Result<User, TestError> original = Result.failure(new TestError.NotFound("1"));
+			final Result<User, TestError> original = Result.err(new TestError.NotFound("1"));
 			final Result<User, TestError> result = original.recover(_ -> new User("0", "Guest", 0));
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertEquals("Guest", result.unwrap().name());
+		}
+
+		@Test
+		@DisplayName("Err: rejects a null recovered value")
+		void recover_rejectsNullValue() {
+			final Result<User, TestError> original = Result.err(new TestError.NotFound("1"));
+			assertThrows(NullPointerException.class, () -> original.recover(_ -> null));
 		}
 	}
 
@@ -624,30 +692,37 @@ class ResultTest {
 	class RecoverWithTests {
 
 		@Test
-		@DisplayName("Success: returns unchanged")
+		@DisplayName("Ok: returns unchanged")
 		void recoverWith_success() {
-			final Result<User, TestError> original = Result.success(new User("1", "John", 30));
-			final Result<User, TestError> result = original.recoverWith(_ -> Result.success(new User("0", "Guest", 0)));
-			assertTrue(result.isSuccess());
+			final Result<User, TestError> original = Result.ok(new User("1", "John", 30));
+			final Result<User, TestError> result = original.recoverWith(_ -> Result.ok(new User("0", "Guest", 0)));
+			assertTrue(result.isOk());
 			assertEquals("John", result.unwrap().name());
 		}
 
 		@Test
-		@DisplayName("Failure: applies recovery mapper")
+		@DisplayName("Err: applies recovery mapper")
 		void recoverWith_failure() {
-			final Result<User, TestError> original = Result.failure(new TestError.NotFound("1"));
-			final Result<User, TestError> result = original.recoverWith(_ -> Result.success(new User("0", "Guest", 0)));
-			assertTrue(result.isSuccess());
+			final Result<User, TestError> original = Result.err(new TestError.NotFound("1"));
+			final Result<User, TestError> result = original.recoverWith(_ -> Result.ok(new User("0", "Guest", 0)));
+			assertTrue(result.isOk());
 			assertEquals("Guest", result.unwrap().name());
 		}
 
 		@Test
-		@DisplayName("Failure: recovery returning Failure propagates")
+		@DisplayName("Err: recovery returning Err propagates")
 		void recoverWith_recoveryReturnsFailure() {
-			final Result<User, TestError> original = Result.failure(new TestError.NotFound("1"));
+			final Result<User, TestError> original = Result.err(new TestError.NotFound("1"));
 			final Result<User, TestError> result = original
-					.recoverWith(_ -> Result.failure(new TestError.Invalid("cannot recover")));
-			assertTrue(result.isFailure());
+					.recoverWith(_ -> Result.err(new TestError.Invalid("cannot recover")));
+			assertTrue(result.isErr());
+		}
+
+		@Test
+		@DisplayName("Err: rejects a null recovered Result")
+		void recoverWith_rejectsNullResult() {
+			final Result<User, TestError> original = Result.err(new TestError.NotFound("1"));
+			assertThrows(NullPointerException.class, () -> original.recoverWith(_ -> null));
 		}
 	}
 
@@ -658,31 +733,31 @@ class ResultTest {
 	class FilterTests {
 
 		@Test
-		@DisplayName("Success + predicate true: unchanged")
+		@DisplayName("Ok + predicate true: unchanged")
 		void filter_successPredicateTrue() {
-			final Result<User, TestError> original = Result.success(new User("1", "John", 30));
+			final Result<User, TestError> original = Result.ok(new User("1", "John", 30));
 			final Result<User, TestError> result = original.filter(u -> u.age() >= 18,
 					() -> new TestError.Invalid("underage"));
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertEquals("John", result.unwrap().name());
 		}
 
 		@Test
-		@DisplayName("Success + predicate false: returns Failure")
+		@DisplayName("Ok + predicate false: returns Err")
 		void filter_successPredicateFalse() {
-			final Result<User, TestError> original = Result.success(new User("1", "John", 15));
+			final Result<User, TestError> original = Result.ok(new User("1", "John", 15));
 			final Result<User, TestError> result = original.filter(u -> u.age() >= 18,
 					() -> new TestError.Invalid("underage"));
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 		}
 
 		@Test
-		@DisplayName("Failure: passes through unchanged")
+		@DisplayName("Err: passes through unchanged")
 		void filter_failure() {
-			final Result<User, TestError> original = Result.failure(new TestError.NotFound("1"));
+			final Result<User, TestError> original = Result.err(new TestError.NotFound("1"));
 			final Result<User, TestError> result = original.filter(u -> u.age() >= 18,
 					() -> new TestError.Invalid("underage"));
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 		}
 	}
 
@@ -693,96 +768,96 @@ class ResultTest {
 	class FoldTests {
 
 		@Test
-		@DisplayName("Success: onSuccess applied")
+		@DisplayName("Ok: onOk applied")
 		void fold_success() {
-			final Result<User, TestError> result = Result.success(new User("1", "John", 30));
+			final Result<User, TestError> result = Result.ok(new User("1", "John", 30));
 			final String message = result.fold(u -> "User: " + u.name(), e -> "Error: " + e);
 			assertEquals("User: John", message);
 		}
 
 		@Test
-		@DisplayName("Failure: onFailure applied")
+		@DisplayName("Err: onErr applied")
 		void fold_failure() {
-			final Result<User, TestError> result = Result.failure(new TestError.NotFound("1"));
+			final Result<User, TestError> result = Result.err(new TestError.NotFound("1"));
 			final String message = result.fold(u -> "User: " + u.name(), e -> "Error: " + e);
 			assertEquals("Error: NotFound[id=1]", message);
 		}
 	}
 
-	// ==================== Terminal: peek() ====================
+	// ==================== Terminal: inspect() ====================
 
 	@Nested
-	@DisplayName("Result.peek()")
+	@DisplayName("Result.inspect()")
 	class PeekTests {
 
 		@Test
-		@DisplayName("Success: consumer executed, returns this")
+		@DisplayName("Ok: consumer executed, returns this")
 		void peek_success() {
-			final Result<User, TestError> original = Result.success(new User("1", "John", 30));
+			final Result<User, TestError> original = Result.ok(new User("1", "John", 30));
 			final AtomicBoolean called = new AtomicBoolean(false);
-			final Result<User, TestError> result = original.peek(_ -> called.set(true));
+			final Result<User, TestError> result = original.inspect(_ -> called.set(true));
 			assertTrue(called.get());
 			assertSame(original, result);
 		}
 
 		@Test
-		@DisplayName("Failure: consumer not executed")
+		@DisplayName("Err: consumer not executed")
 		void peek_failure() {
-			final Result<User, TestError> original = Result.failure(new TestError.NotFound("1"));
+			final Result<User, TestError> original = Result.err(new TestError.NotFound("1"));
 			final AtomicBoolean called = new AtomicBoolean(false);
-			final Result<User, TestError> result = original.peek(_ -> called.set(false));
+			final Result<User, TestError> result = original.inspect(_ -> called.set(false));
 			assertFalse(called.get());
 			assertSame(original, result);
 		}
 	}
 
-	// ==================== Terminal: peekFailure() ====================
+	// ==================== Terminal: inspectErr() ====================
 
 	@Nested
-	@DisplayName("Result.peekFailure()")
+	@DisplayName("Result.inspectErr()")
 	class PeekFailureTests {
 
 		@Test
-		@DisplayName("Failure: consumer executed")
+		@DisplayName("Err: consumer executed")
 		void peekFailure_failure() {
-			final Result<User, TestError> original = Result.failure(new TestError.NotFound("1"));
+			final Result<User, TestError> original = Result.err(new TestError.NotFound("1"));
 			final AtomicBoolean called = new AtomicBoolean(false);
-			final Result<User, TestError> result = original.peekFailure(_ -> called.set(true));
+			final Result<User, TestError> result = original.inspectErr(_ -> called.set(true));
 			assertTrue(called.get());
 			assertSame(original, result);
 		}
 
 		@Test
-		@DisplayName("Success: consumer not executed")
+		@DisplayName("Ok: consumer not executed")
 		void peekFailure_success() {
-			final Result<User, TestError> original = Result.success(new User("1", "John", 30));
+			final Result<User, TestError> original = Result.ok(new User("1", "John", 30));
 			final AtomicBoolean called = new AtomicBoolean(false);
-			final Result<User, TestError> result = original.peekFailure(_ -> called.set(true));
+			final Result<User, TestError> result = original.inspectErr(_ -> called.set(true));
 			assertFalse(called.get());
 			assertSame(original, result);
 		}
 	}
 
-	// ==================== Terminal: isSuccess() / isFailure() ====================
+	// ==================== Terminal: isOk() / isErr() ====================
 
 	@Nested
-	@DisplayName("Result.isSuccess() / isFailure()")
+	@DisplayName("Result.isOk() / isErr()")
 	class IsSuccessFailureTests {
 
 		@Test
-		@DisplayName("isSuccess returns true for Success")
+		@DisplayName("isOk returns true for Ok")
 		void isSuccess_trueForSuccess() {
-			final Result<User, TestError> result = Result.success(new User("1", "John", 30));
-			assertTrue(result.isSuccess());
-			assertFalse(result.isFailure());
+			final Result<User, TestError> result = Result.ok(new User("1", "John", 30));
+			assertTrue(result.isOk());
+			assertFalse(result.isErr());
 		}
 
 		@Test
-		@DisplayName("isFailure returns true for Failure")
+		@DisplayName("isErr returns true for Err")
 		void isFailure_trueForFailure() {
-			final Result<User, TestError> result = Result.failure(new TestError.NotFound("1"));
-			assertFalse(result.isSuccess());
-			assertTrue(result.isFailure());
+			final Result<User, TestError> result = Result.err(new TestError.NotFound("1"));
+			assertFalse(result.isOk());
+			assertTrue(result.isErr());
 		}
 	}
 
@@ -793,16 +868,16 @@ class ResultTest {
 	class UnwrapTests {
 
 		@Test
-		@DisplayName("Success: returns value")
+		@DisplayName("Ok: returns value")
 		void unwrap_success() {
-			final Result<User, TestError> result = Result.success(new User("1", "John", 30));
+			final Result<User, TestError> result = Result.ok(new User("1", "John", 30));
 			assertEquals("John", result.unwrap().name());
 		}
 
 		@Test
-		@DisplayName("Failure: throws RuntimeException")
+		@DisplayName("Err: throws RuntimeException")
 		void unwrap_failure() {
-			final Result<User, TestError> result = Result.failure(new TestError.NotFound("1"));
+			final Result<User, TestError> result = Result.err(new TestError.NotFound("1"));
 			final RuntimeException ex = assertThrows(RuntimeException.class, result::unwrap);
 			assertTrue(ex.getMessage().contains("NotFound"));
 		}
@@ -815,16 +890,16 @@ class ResultTest {
 	class UnwrapOrThrowTests {
 
 		@Test
-		@DisplayName("Success: returns value")
+		@DisplayName("Ok: returns value")
 		void unwrapOrThrow_success() {
-			final Result<User, TestError> result = Result.success(new User("1", "John", 30));
+			final Result<User, TestError> result = Result.ok(new User("1", "John", 30));
 			assertEquals("John", result.unwrapOrThrow(_ -> new RuntimeException("expected")).name());
 		}
 
 		@Test
-		@DisplayName("Failure: throws custom exception")
+		@DisplayName("Err: throws custom exception")
 		void unwrapOrThrow_failure() {
-			final Result<User, TestError> result = Result.failure(new TestError.NotFound("1"));
+			final Result<User, TestError> result = Result.err(new TestError.NotFound("1"));
 			final IllegalStateException ex = assertThrows(IllegalStateException.class,
 					() -> result.unwrapOrThrow(e -> new IllegalStateException("Not found: " + e)));
 			assertTrue(ex.getMessage().contains("Not found"));
@@ -838,17 +913,17 @@ class ResultTest {
 	class UnwrapOrTests {
 
 		@Test
-		@DisplayName("Success: returns value")
+		@DisplayName("Ok: returns value")
 		void unwrapOr_success() {
-			final Result<User, TestError> result = Result.success(new User("1", "John", 30));
+			final Result<User, TestError> result = Result.ok(new User("1", "John", 30));
 			final User defaultUser = new User("0", "Guest", 0);
 			assertEquals("John", result.unwrapOr(defaultUser).name());
 		}
 
 		@Test
-		@DisplayName("Failure: returns default")
+		@DisplayName("Err: returns default")
 		void unwrapOr_failure() {
-			final Result<User, TestError> result = Result.failure(new TestError.NotFound("1"));
+			final Result<User, TestError> result = Result.err(new TestError.NotFound("1"));
 			final User defaultUser = new User("0", "Guest", 0);
 			assertEquals("Guest", result.unwrapOr(defaultUser).name());
 		}
@@ -861,25 +936,25 @@ class ResultTest {
 	class UnwrapOrElseTests {
 
 		@Test
-		@DisplayName("Success: returns value")
+		@DisplayName("Ok: returns value")
 		void unwrapOrElse_success() {
-			final Result<User, TestError> result = Result.success(new User("1", "John", 30));
+			final Result<User, TestError> result = Result.ok(new User("1", "John", 30));
 			final User returned = result.unwrapOrElse(() -> new User("0", "Guest", 0));
 			assertEquals("John", returned.name());
 		}
 
 		@Test
-		@DisplayName("Failure: supplier result")
+		@DisplayName("Err: supplier result")
 		void unwrapOrElse_failure() {
-			final Result<User, TestError> result = Result.failure(new TestError.NotFound("1"));
+			final Result<User, TestError> result = Result.err(new TestError.NotFound("1"));
 			final User returned = result.unwrapOrElse(() -> new User("0", "Guest", 0));
 			assertEquals("Guest", returned.name());
 		}
 
 		@Test
-		@DisplayName("Success: supplier not called")
+		@DisplayName("Ok: supplier not called")
 		void unwrapOrElse_supplierNotCalledOnSuccess() {
-			final Result<User, TestError> result = Result.success(new User("1", "John", 30));
+			final Result<User, TestError> result = Result.ok(new User("1", "John", 30));
 			final AtomicBoolean called = new AtomicBoolean(false);
 			result.unwrapOrElse(() -> {
 				called.set(true);
@@ -896,18 +971,18 @@ class ResultTest {
 	class StreamTests {
 
 		@Test
-		@DisplayName("Success: returns Stream with one element")
+		@DisplayName("Ok: returns Stream with one element")
 		void stream_success() {
-			final Result<User, TestError> result = Result.success(new User("1", "John", 30));
+			final Result<User, TestError> result = Result.ok(new User("1", "John", 30));
 			final List<User> list = result.stream().toList();
 			assertEquals(1, list.size());
 			assertEquals("John", list.getFirst().name());
 		}
 
 		@Test
-		@DisplayName("Failure: returns empty Stream")
+		@DisplayName("Err: returns empty Stream")
 		void stream_failure() {
-			final Result<User, TestError> result = Result.failure(new TestError.NotFound("1"));
+			final Result<User, TestError> result = Result.err(new TestError.NotFound("1"));
 			final List<User> list = result.stream().toList();
 			assertEquals(0, list.size());
 		}
@@ -920,29 +995,28 @@ class ResultTest {
 	class ToOptionalTests {
 
 		@Test
-		@DisplayName("Success: returns Optional.of(value)")
+		@DisplayName("Ok: returns Optional.of(value)")
 		void toOptional_success() {
-			final Result<User, TestError> result = Result.success(new User("1", "John", 30));
+			final Result<User, TestError> result = Result.ok(new User("1", "John", 30));
 			final Optional<User> optional = result.toOptional();
 			assertTrue(optional.isPresent());
 			assertEquals("John", optional.get().name());
 		}
 
 		@Test
-		@DisplayName("Failure: returns Optional.empty()")
+		@DisplayName("Err: returns Optional.empty()")
 		void toOptional_failure() {
-			final Result<User, TestError> result = Result.failure(new TestError.NotFound("1"));
+			final Result<User, TestError> result = Result.err(new TestError.NotFound("1"));
 			final Optional<User> optional = result.toOptional();
 			assertTrue(optional.isEmpty());
 		}
 
 		@Test
-		@DisplayName("Success with null: toOptional returns empty (ofNullable semantics)")
+		@DisplayName("empty Result contains Unit in Optional")
 		void toOptional_successWithNull() {
-			final Result<String, TestError> result = Result.success(null);
-			final Optional<String> optional = result.toOptional();
-			// Optional.ofNullable(null) returns empty, which is the expected behavior
-			assertTrue(optional.isEmpty());
+			final Result<Result.Unit, TestError> result = Result.empty();
+			final Optional<Result.Unit> optional = result.toOptional();
+			assertSame(Result.Unit.INSTANCE, optional.orElseThrow());
 		}
 	}
 
@@ -955,18 +1029,18 @@ class ResultTest {
 		@Test
 		@DisplayName("chaining multiple transformations")
 		void chaining_multipleTransformations() {
-			final var result = Result.success(new User("1", "John", 30)).map(User::name).map(String::toUpperCase)
+			final var result = Result.ok(new User("1", "John", 30)).map(User::name).map(String::toUpperCase)
 					.map(s -> "User: " + s);
-			assertTrue(result.isSuccess());
+			assertTrue(result.isOk());
 			assertEquals("User: JOHN", result.unwrap());
 		}
 
 		@Test
-		@DisplayName("chaining with Failure short-circuits")
+		@DisplayName("chaining with Err short-circuits")
 		void chaining_failureShortCircuits() {
 			final AtomicBoolean secondCalled = new AtomicBoolean(false);
 			final AtomicBoolean thirdCalled = new AtomicBoolean(false);
-			final Result<String, TestError> result = Result.<String, TestError>failure(new TestError.NotFound("1"))
+			final Result<String, TestError> result = Result.<String, TestError>err(new TestError.NotFound("1"))
 					.map(v -> {
 						secondCalled.set(true);
 						return v;
@@ -974,35 +1048,33 @@ class ResultTest {
 						thirdCalled.set(true);
 						return v;
 					});
-			assertTrue(result.isFailure());
+			assertTrue(result.isErr());
 			assertFalse(secondCalled.get());
 			assertFalse(thirdCalled.get());
 		}
 
 		@Test
-		@DisplayName("mapError does not affect Success")
+		@DisplayName("mapErr does not affect Ok")
 		void mapError_doesNotAffectSuccess() {
-			final Result<User, TestError> result = Result.success(new User("1", "John", 30))
-					.mapError(_ -> new TestError.Invalid("should not happen"));
-			assertTrue(result.isSuccess());
+			final Result<User, TestError> result = Result.ok(new User("1", "John", 30))
+					.mapErr(_ -> new TestError.Invalid("should not happen"));
+			assertTrue(result.isOk());
 			assertEquals("John", result.unwrap().name());
 		}
 
 		@Test
-		@DisplayName("null in error type is valid")
+		@DisplayName("null in error type is rejected")
 		void nullInErrorTypeIsValid() {
-			final Result<String, String> result = Result.failure(null);
-			assertTrue(result.isFailure());
-			assertThrows(RuntimeException.class, result::unwrap);
+			assertThrows(NullPointerException.class, () -> Result.err(null));
 		}
 
 		@Test
 		@DisplayName("transformations preserve immutability")
 		void transformationsPreserveImmutability() {
-			final Result<User, TestError> original = Result.success(new User("1", "John", 30));
+			final Result<User, TestError> original = Result.ok(new User("1", "John", 30));
 			final Result<String, TestError> mapped = original.map(User::name);
-			assertTrue(original.isSuccess());
-			assertTrue(mapped.isSuccess());
+			assertTrue(original.isOk());
+			assertTrue(mapped.isOk());
 		}
 	}
 }

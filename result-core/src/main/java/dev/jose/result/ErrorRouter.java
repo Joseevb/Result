@@ -1,6 +1,5 @@
 package dev.jose.result;
 
-import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
@@ -97,7 +96,6 @@ public final class ErrorRouter<E> implements Function<Exception, E> {
   /// @param <E>      the domain error type
   /// @return a new `ErrorRouter` with only the fallback configured
   /// @throws NullPointerException if `fallback` is null
-	@Contract("_ -> new")
 	public static <E> @NonNull ErrorRouter<E> defaultsTo(@NonNull Function<Exception, E> fallback) {
 		return new ErrorRouter<>(List.of(), fallback);
 	}
@@ -120,7 +118,6 @@ public final class ErrorRouter<E> implements Function<Exception, E> {
   /// @param <X>    the specific exception type
   /// @return a new `ErrorRouter` with this rule appended
   /// @throws NullPointerException if `type` or `mapper` is null
-	@Contract("_, _ -> new")
 	public <X extends Exception> @NonNull ErrorRouter<E> map(@NonNull Class<X> type, @NonNull Function<X, E> mapper) {
 		final var newRules = new ArrayList<Rule<E>>(this.rules.size() + 1);
 		newRules.addAll(this.rules);
