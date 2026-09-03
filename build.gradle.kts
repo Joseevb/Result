@@ -26,7 +26,7 @@ subprojects {
   }
 
   tasks.withType<JavaCompile>().configureEach {
-    options.compilerArgs.addAll(listOf("--enable-preview", "--release", "25"))
+    options.compilerArgs.addAll(listOf("--release", "25"))
   }
 
   dependencies {

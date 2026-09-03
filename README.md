@@ -1,636 +1,429 @@
 # Result
 
-A modern, type-safe Result monad library for Java implementing Railway Oriented Programming. Eliminate exception-driven control flow with composable, compile-time checked error handling.
+A small Java library for explicit success and failure values. `Result<T, E>` is a sealed type with
+an `Ok` value of type `T` or an `Err` value of type `E`.
 
 [![Java 25+](https://img.shields.io/badge/Java-25%2B-blue)](https://adoptium.net/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.joseevb/result-core.svg)](https://central.sonatype.com/search?q=io.github.joseevb)
 
-## Overview
-
-`Result` is a library that brings functional error handling to Java. Instead of throwing exceptions, operations return a `Result<T, E>` containing either a success value or a domain error. This library provides:
-
-- A sealed `Result<T, E>` type for synchronous operations with a rich fluent API
-- A composable `Validator<T>` for declarative field-level validation
-- A declarative `ErrorRouter<E>` for exception-to-domain-error mapping
-- Spring Boot integration with automatic Result unwrapping and RFC 7807 Problem Details responses
-- Zero required runtime dependencies in the core module
-
-## Features
-
-- **Type-Safe Error Handling** -- Compile-time verification of all error paths
-- **Railway Oriented Programming** -- Chain operations without explicit error checks at each step
-- **Declarative Validation** -- Fluent `Validator` with field-level error collection
-- **Exception Mapping** -- `ErrorRouter` eliminates verbose try-catch-translate patterns
-- **Spring Boot Integration** -- Automatic controller response conversion with RFC 7807 Problem Details and i18n
-- **Zero Core Dependencies** -- Nullability annotations are compile-only
-
 ## Requirements
 
-- **Java 25+** (uses pattern matching, sealed interfaces, records)
-- **Gradle 9.x** or **Maven 3.8+**
-- **Spring Boot 4.x** (optional, only for `result-springboot` integration)
+- Java 25
+- Gradle 9.x for building this repository
+- Spring Boot 4.0.3 for the tested Spring MVC integration module
+
+The repository is built with Gradle. The published artifacts can also be consumed from Maven.
 
 ## Installation
 
-### Gradle (Kotlin DSL)
-
-Core library:
+### Gradle
 
 ```kotlin
 dependencies {
-    implementation("io.github.joseevb:result-core:0.1.0")
+    implementation("io.github.joseevb:result-core:0.1.0-SNAPSHOT")
 }
 ```
 
-Spring Boot integration:
+For servlet-based Spring MVC response handling, add the integration module and provide the Spring
+Boot MVC dependencies in the application:
 
 ```kotlin
 dependencies {
-    implementation("io.github.joseevb:result-springboot:0.1.0")
+    implementation("io.github.joseevb:result-springboot:0.1.0-SNAPSHOT")
+    implementation("org.springframework.boot:spring-boot-starter-web")
 }
 ```
 
 ### Maven
 
-Core library:
-
 ```xml
 <dependency>
     <groupId>io.github.joseevb</groupId>
     <artifactId>result-core</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.0-SNAPSHOT</version>
 </dependency>
 ```
 
-Spring Boot integration:
+The Spring MVC integration artifact is:
 
 ```xml
 <dependency>
     <groupId>io.github.joseevb</groupId>
     <artifactId>result-springboot</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.0-SNAPSHOT</version>
 </dependency>
 ```
 
-## Quick Start
+The integration module declares Spring Boot dependencies as `compileOnly`; the consuming
+application must provide compatible Spring MVC and Spring Boot dependencies.
 
-### Define Domain Errors
+## Basic Example
 
-Start with a sealed interface representing all possible errors your operation can produce:
+The typed `Result.from` overload catches an `Exception` and maps it to the declared error type.
+`Error` instances are not caught. Pattern matching makes both outcomes explicit:
 
 ```java
-public sealed interface UserError extends Failure {
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    record NotFound(Long id) implements UserError {}
+import io.github.joseevb.result.Result;
 
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    record InvalidInput(String field, String reason) implements UserError {}
+sealed interface ParseError {
+    record InvalidNumber() implements ParseError {}
+}
 
-    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    record DatabaseError(String message) implements UserError {}
-
-    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    record UnknownError(String message, Throwable cause) implements UserError {}
-
-    default String getMessage() {
-        return switch(this) {
-            case NotFound(var id) -> "User with id %s not found".formatted(id);
-            case InvalidInput(var field, var reason) -> "%s: %s".formatted(field, reason);
-            case DatabaseError(String message) -> message;
-            default UnknownError(var message, _) -> "Unknown error: %s".formatted(message);
-        }
+// Vanilla Java
+void vanillaJava(String input) {
+    try {
+        IO.println(Integer.parseInt(input));
+    } catch (NumberFormatException e) {
+        System.err.println("Invalid number");
     }
 }
-```
 
-### Use Result in Your Service
-
-```java
-public class UserService {
-    public Result<User, UserError> findById(Long id) {
-        return Result.from(
-            () -> repository.findById(id)
-                .orElseThrow(() -> new UserNotFoundException(id)),
-            exception -> new UserError.DatabaseError(exception.getMessage())
-        );
-    }
-
-    public Result<User, UserError> validateAndSave(User user) {
-        return Validator.of(user)
-            .required(User::email, "email")
-            .matches(User::email, "^[A-Za-z0-9+_.-]+@(.+)$", "email", "Invalid email format")
-            .length(User::name, 1, 100, "name")
-            .result()
-            .andThen(validUser -> Result.from(
-                () -> repository.save(validUser),
-                ex -> new UserError.DatabaseError(ex.getMessage())
-            ));
-    }
-}
-```
-
-### Chain Operations
-
-```java
-var response = userService.findById(42)
-    .map(User::email)
-    .inspect(email -> log.info("Found user: {}", email))
-    .andThen(email -> validateEmail(email))
-    .recover(error -> "guest@example.com")
-    .fold(
-        email -> "Ok: " + email,
-        error -> "Failed: " + error.getMessage()
+// With Result
+void resultJava(String input) {
+    var result = Result.from(
+        () -> Integer.parseInt(input),
+        _ -> new ParseError.InvalidNumber()
     );
+
+    switch (result) {
+        case Result.Ok(var number) -> IO.println(number);
+        case Result.Err(var error) -> System.err.println("Invalid number");
+    }
+}
 ```
 
-## API Reference
+`Ok` and `Err` reject `null`. A supplier returning `null`, an error supplier returning `null`, or a
+typed exception mapper returning `null` therefore fails with `NullPointerException`.
 
-### Result<T, E>
+## `Result<T, E>`
 
-The core synchronous result type. It is either an `Ok` value or an `Err` domain error.
-The error type `E` is commonly a sealed domain-error hierarchy.
-
-`Ok` and `Err` reject `null`. For successful operations without a meaningful value, use
-`empty()`, which produces `Result<Unit, E>` containing `Result.Unit.INSTANCE`.
-
-#### Creation
+`Result` is a sealed interface with these public variants:
 
 ```java
-// Basic constructors
-Result<User, UserError> okResult = Result.ok(user);
-Result<User, UserError> errResult = Result.err(new UserError.NotFound(id));
+Result.Ok<T, E>(T value)
+Result.Err<T, E>(E error)
+Result.Unit.INSTANCE
+```
 
-// From Optional
-Result<User, UserError> fromOpt = Result.fromOptional(
-    repository.findById(id),
-    () -> new UserError.NotFound(id)
-);
+The static factories are:
 
-// From nullable
-Result<User, UserError> fromNull = Result.ofNullable(
+```java
+Result<Integer, String> ok = Result.ok(42);
+Result<Integer, String> err = Result.err("invalid number");
+Result<Integer, String> nullable = Result.ofNullable(
     possiblyNull,
-    () -> new UserError.InvalidInput("field", "null not allowed")
+    () -> "value was null"
 );
-
-// Capture exceptions as Result<T, Exception>
-Result<User, Exception> captured = Result.from(() -> repository.save(user));
-
-// Typed error conversion path
-Result<User, UserError> capturedTyped = Result.from(
-    () -> repository.save(user),
-    ex -> new UserError.DatabaseError(ex.getMessage())
-);
-
-// For operations without a meaningful value
-Result<Result.Unit, UserError> voidOp = Result.empty();
+Result<Result.Unit, String> empty = Result.empty();
 ```
 
-#### Transformations
+`Result.from(action)` returns `Result<T, Exception>`. The typed overload returns `Result<T, E>`:
 
 ```java
-// Transform the Ok value
-Result<String, UserError> mapped = result.map(User::email);
+import java.util.Optional;
 
-// Transform the Err value
-Result<User, ApiError> apiResult = result.mapErr(
-    err -> new ApiError("USER_ERROR", err.getMessage())
+Result<Integer, Exception> captured = Result.from(() -> Integer.parseInt(input));
+Result<Integer, ParseError> mapped = Result.from(
+    () -> Integer.parseInt(input),
+    _ -> new ParseError.InvalidNumber()
 );
 
-// Transform both Ok and Err paths
-Result<UserDTO, ApiError> both = result.map(
-    user -> new UserDTO(user.id(), user.email()),
-    err -> new ApiError("FAIL", err.getMessage())
-);
-
-// Chain operations that return Results
-Result<Boolean, UserError> chained = result
-    .andThen(user -> validateUser(user))  // returns Result<Boolean, UserError>
-    .andThen(isValid -> saveIfValid(isValid));
-
-// Combine two independent Results
-Result<UserProfile, UserError> combined = userResult.combine(
-    preferencesResult,
-    (user, prefs) -> new UserProfile(user, prefs)
-);
-
-// Filter with a predicate
-Result<User, UserError> activeOnly = result.filter(
-    User::isActive,
-    () -> new UserError.InvalidInput("user", "User is inactive")
+Result<Integer, ParseError> fromOptional = Result.fromOptional(
+    Optional.of(42),
+    () -> new ParseError.InvalidNumber()
 );
 ```
 
-#### Recovery
+Both overloads catch only `Exception` thrown by the supplier. They do not catch `Error`.
+The supplier type is `Result.ThrowingSupplier<T>`, a functional interface whose `get()` method may
+throw a checked `Exception`.
+
+### Transforming Results
 
 ```java
-// Recover with a fallback value
-Result<User, UserError> withFallback = result.recover(
-    error -> User.guest()
-);
-
-// Recover with another Result
-Result<User, UserError> withRecovery = result.recoverWith(
-    error -> cacheService.findById(id)
-);
-```
-
-#### Terminal Operations
-
-```java
-// Exit the monad: fold both paths
-String message = result.fold(
-    user -> "Found: " + user.name(),
-    error -> "Error: " + error.getMessage()
-);
-
-// Safe extraction
-User user = result.unwrapOr(User.guest());
-User user2 = result.unwrapOrElse(() -> loadFromCache());
-
-// Unsafe extraction (use only in tests)
-User user3 = result.unwrap();  // throws RuntimeException on Err
-
-// Custom exception mapping
-User user4 = result.unwrapOrThrow(
-    err -> new NotFoundException(err.getMessage())
-);
-
-// Convert to stream or optional
-Stream<User> stream = result.stream();
-Optional<User> opt = result.toOptional();
-```
-
-#### Side Effects
-
-```java
-// Inspect an Ok without modifying it
-result
-    .inspect(user -> metrics.recordUser(user))
-    .inspect(user -> log.info("Loaded user: {}", user.id()));
-
-// Inspect an Err without modifying it
-result
-    .inspectErr(error -> alerting.send("User load failed", error))
-    .inspectErr(error -> log.error("Error: {}", error.getMessage()));
-```
-
-#### Bulk Operations
-
-```java
-// Collect results from a stream (short-circuit on the first Err)
-Stream<Result<User, UserError>> results = userIds.stream()
-    .map(repository::findById);
-Result<List<User>, UserError> allUsers = Result.collect(results);
-
-// Flatten nested Results
-Result<User, UserError> flat = Result.flatten(
-    nestedResult  // Result<Result<User, UserError>, UserError>
+Result<Integer, ParseError> parsed = Result.ok(10);
+Result<String, ParseError> text = parsed.map(String::valueOf);
+Result<Integer, String> translated = parsed.mapErr(error -> "parse failed");
+Result<String, String> both = parsed.map(
+    String::valueOf,
+    error -> "parse failed"
 );
 ```
 
-### Validator<T>
-
-Fluent, immutable validator for collecting field-level errors and returning a `Result`.
-
-#### Creation & Composition
+Use `andThen` when the next operation already returns a `Result`:
 
 ```java
-// Single validation
-Validator<User> validator = Validator.of(user)
-    .required(User::email, "email")
-    .nonNull(User::name, "name")
-    .length(User::name, 1, 100, "name");
-
-// Compose multiple validators
-Validator<User> composed = Validator.compose(user,
-    v -> v.required(User::email, "email")
-          .matches(User::email, "^[A-Za-z0-9+_.-]+@(.+)$", "email", "Invalid format"),
-    v -> v.length(User::name, 1, 100, "name")
-          .positive(User::age, "age")
+Result<Integer, ParseError> validated = parsed.andThen(value ->
+    value >= 0
+        ? Result.ok(value)
+        : Result.err(new ParseError.InvalidNumber())
 );
 ```
 
-#### Built-In Validations
+For an `Err`, `map`, `andThen`, and the success side of `map` pass the error through. For an `Ok`,
+`mapErr` passes the value through.
+
+`combine` evaluates the combiner only when both Results are `Ok`. Otherwise it returns the first
+`Err` in left-to-right order:
 
 ```java
-// String validations
-validator
-    .required(User::email, "email")              // not null/blank
-    .matches(User::email, ".*@.*", "email", "Invalid email")  // regex
-    .length(User::name, 1, 100, "name");        // length bounds
+Result<String, String> combined = Result.ok("user").combine(
+    Result.ok("profile"),
+    (user, profile) -> user + ":" + profile
+);
+```
 
-// Numeric validations
-validator
-    .positive(User::age, "age")                 // > 0
-    .range(User::score, 0, 100, "score");      // 0-100 inclusive
+### Recovery and Inspection
 
-// Null checks
-validator
-    .nonNull(User::profile, "profile");
+```java
+Result<Integer, ParseError> recovered = parsed.recover(error -> 0);
+Result<Integer, ParseError> retried = parsed.recoverWith(error -> parseAgain());
 
-// Optional fields
-validator
-    .validateOptional(
-        User::middleName,
-        name -> name.length() > 1,
-        "middleName",
-        "Must be at least 2 characters"
+parsed
+    .inspect(value -> println("value=" + value))
+    .inspectErr(error -> System.err.println("error=" + error));
+```
+
+`recover` converts an `Err` to an `Ok`. `recoverWith` replaces an `Err` with another Result and
+requires its callback to return a non-null Result. Both leave an `Ok` unchanged. `inspect` and
+`inspectErr` return the same Result instance after conditionally running their callback.
+
+Use `isOk()` and `isErr()` for state checks. To handle both states in one expression, use `fold`:
+
+```java
+String message = parsed.fold(
+    value -> "value=" + value,
+    error -> "error=" + error
+);
+```
+
+### Extraction and Conversion
+
+```java
+int value = parsed.unwrapOr(0);
+int fallback = parsed.unwrapOrElse(this::defaultValue);
+int unsafe = parsed.unwrap();
+int mapped = parsed.unwrapOrThrow(error -> new IllegalStateException("parse failed"));
+
+Stream<Integer> stream = parsed.stream();
+Optional<Integer> optional = parsed.toOptional();
+```
+
+`unwrap` throws `RuntimeException` for an `Err`. `unwrapOrThrow` throws the `RuntimeException`
+returned by its mapper. Prefer `fold`, pattern matching, or a recovery operation when the error case
+is expected.
+
+### Collecting and Sequencing
+
+`collect(Stream)` produces a `List` and stops at the first `Err`. The collector overload supports a
+different result container:
+
+```java
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+List<String> inputs = List.of("10", "20", "not-a-number");
+
+Result<List<Integer>, ParseError> values = Result.collect(
+    inputs.stream().map(input -> Result.from(
+        () -> Integer.parseInt(input),
+        _ -> new ParseError.InvalidNumber()
+    ))
+);
+
+Result<Set<Integer>, ParseError> unique = Result.collect(
+    inputs.stream().map(input -> Result.from(
+        () -> Integer.parseInt(input),
+        _ -> new ParseError.InvalidNumber()
+    )),
+    Collectors.toSet()
+);
+```
+
+`sequence(List<Result<T, E>>)` and its varargs overload are equivalent for a list or array of
+Results:
+
+```java
+Result<List<Integer>, ParseError> sequenced = Result.sequence(List.of(
+    Result.ok(1),
+    Result.ok(2),
+    Result.ok(3)
+));
+```
+
+Both operations return the first `Err` and otherwise return an `Ok` containing all values.
+`flatten` converts `Result<Result<T, E>, E>` into `Result<T, E>`.
+
+## `Validator<T, E>`
+
+`Validator` is an immutable, two-parameter validator. It stores errors in a `Map<String, E>` keyed
+by field name. Adding another error for the same field replaces that field's previous error.
+
+```java
+record User(String email, String name, int age) {}
+record ValidationError(String code, String message) {}
+
+Validator<User, ValidationError> validator = Validator
+    .<User, ValidationError>of(user)
+    .validate(
+        value -> value.age() >= 18,
+        "age",
+        new ValidationError("AGE_MIN", "Must be 18+")
+    )
+    .nonNull(
+        User::email,
+        "email",
+        new ValidationError("EMAIL_REQUIRED", "Email is required")
+    )
+    .matches(
+        User::email,
+        "^[A-Za-z0-9+_.-]+@(.+)$",
+        "email",
+        new ValidationError("EMAIL_FORMAT", "Invalid email")
+    )
+    .length(
+        User::name,
+        1,
+        100,
+        "name",
+        new ValidationError("NAME_LENGTH", "Invalid name length")
+    )
+    .range(
+        User::age,
+        0,
+        150,
+        "age",
+        new ValidationError("AGE_RANGE", "Invalid age")
     );
 ```
 
-#### Custom Validations
+The available validation methods are:
+
+- `validate(Predicate<T>, String, E)`
+- `validate(Predicate<T>, String, Supplier<E>)`
+- `validateIf(Predicate<T>, UnaryOperator<Validator<T, E>>)`
+- `nonNull(Function<T, U>, String, E)`
+- `matches(Function<T, String>, String pattern, String, E)`
+- `range(Function<T, N>, double min, double max, String, E)`
+- `length(Function<T, String>, int min, int max, String, E)`
+
+`matches`, `range`, and `length` treat a null extracted value as a validation failure. Their bounds
+are inclusive. The supplier overload of `validate` computes its error only when the predicate fails.
+`validateIf` applies its validation block only when its condition is true.
+
+Convert a validator to a Result with either the default error map or a mapped error type:
 
 ```java
-// Predicate-based
-validator.validate(
-    user -> user.passwordHash() != null,
-    "password",
-    "Password is required"
-);
-
-// Conditional validation
-validator.validateIf(
-    user -> user.isPremium(),
-    v -> v.nonNull(User::billingAddress, "billingAddress")
-);
-
-// Cross-field constraints
-validator.validateFields(
-    user -> user.password().equals(user.confirmPassword()),
-    "Passwords must match",
-    "password", "confirmPassword"
+Result<User, Map<String, ValidationError>> result = validator.result();
+Result<User, ValidationError> collapsed = validator.resultOr(
+    errors -> errors.values().stream().findFirst().orElseThrow()
 );
 ```
 
-#### Result Conversion
+`result()` and `resultOr(...)` return an `Ok` containing the target when there are no errors. With
+errors, they return an `Err` containing an unmodifiable copy of the error map or the mapped error.
+`errors()` returns an unmodifiable view of the current map. `hasErrors()` and `errorCount()` expose
+its state. `compose(target, validations...)` applies validation functions in order.
+
+## `ErrorRouter<E>`
+
+`ErrorRouter` is an immutable `Function<Exception, E>` for mapping exceptions to domain errors.
+Rules are checked in registration order, and the first matching rule wins. A rule matches its
+registered exception type and subclasses.
 
 ```java
-// Standard Result with error map
-Result<User, Map<String, String>> result = validator.result();
-
-// Custom error type
-Result<User, ValidationError> result = validator.resultOr(
-    errors -> new ValidationError(errors)
-);
-
-// Error inspection
-if (validator.hasErrors()) {
-    int count = validator.errorCount();
-    // ...
+sealed interface AppError {
+    record InvalidInput() implements AppError {}
+    record DatabaseFailure() implements AppError {}
+    record Unexpected() implements AppError {}
 }
+
+var router = ErrorRouter
+    .<AppError>defaultsTo(_ -> new AppError.Unexpected())
+    .map(NumberFormatException.class, _ -> new AppError.InvalidInput())
+    .map(Exception.class, _ -> new AppError.DatabaseFailure());
+
+AppError error = router.apply(new NumberFormatException());
+int rules = router.ruleCount();
+boolean mapsNumbers = router.hasRuleFor(NumberFormatException.class);
 ```
 
-### ErrorRouter<E>
+Register specific exception types before general types. `defaultsTo` is the required entry point;
+the fallback is used when no explicit rule matches.
 
-Declarative exception-to-domain-error mapper. Eliminates verbose try-catch-translate patterns in service layers.
+## Spring MVC Integration
 
-#### Creation & Configuration
+The `result-springboot` module provides `ResultResponseAdvice` for servlet-based Spring MVC only.
+It is auto-configured when the application is a servlet web application, Spring MVC's
+`ResponseBodyAdvice` is available, and no application-provided advice takes precedence.
 
-```java
-// Define once, reuse everywhere
-Function<Exception, UserError> errorRouter = ErrorRouter
-    .defaultsTo(ex -> new UserError.DatabaseError(ex.getMessage()))
-    .map(IllegalArgumentException.class,
-        ex -> new UserError.InvalidInput("field", ex.getMessage()))
-    .map(DataIntegrityViolationException.class,
-        _ -> new UserError.InvalidInput("email", "Already exists"))
-    .map(TimeoutException.class,
-        _ -> new UserError.DatabaseError("Request timeout"));
+Controller methods may return:
 
-// Invoke in Result.from()
-Result<User, UserError> result = Result.from(
-    () -> repository.save(user),
-    this.errorRouter
-);
-```
+- `Result<T, E>`
+- `ResponseEntity<Result<T, E>>`
 
-#### Mapping Rules
+An `Ok` is unwrapped to its value. An `Err` is converted to a Spring `ProblemDetail` only when its
+error implements `Failure`; otherwise an `IllegalStateException` is thrown. A failure uses its
+`@ResponseStatus` code, or HTTP 500 when it has no annotation. `ResponseEntity` headers are
+preserved, while an `Err` sets the response status to the failure status.
 
 ```java
-// Map specific exception type
-router.map(IllegalArgumentException.class,
-    ex -> new UserError.InvalidInput("input", ex.getMessage())
-);
+import io.github.joseevb.result.Result;
+import io.github.joseevb.result.spring.Failure;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.ResponseStatus;
 
-// Exception subclasses are matched by their declared supertype
-router.map(IOException.class,
-    ex -> new UserError.DatabaseError(ex.getMessage())
-);
-```
-
-#### Introspection
-
-```java
-int ruleCount = router.ruleCount();
-boolean hasRule = router.hasRuleFor(IllegalArgumentException.class);
-```
-
-## Spring Boot Integration
-
-### Setup
-
-Register the `ResultResponseAdvice` bean in your configuration:
-
-```java
-@Configuration
-public class ResultConfig {
-    @Bean
-    public ResultResponseAdvice resultAdvice(MessageSource messageSource) {
-        return new ResultResponseAdvice(messageSource);
+@ResponseStatus(HttpStatus.NOT_FOUND)
+record UserNotFound(long userId) implements Failure {
+    @Override
+    public String getMessage() {
+        return "User " + userId + " was not found";
     }
 }
 ```
 
-The advice is auto-configured if you depend on `result-springboot` with proper Spring Boot version.
+`Failure` requires `getMessage()`. Its defaults provide:
 
-### Define Domain Errors
+- `getMessageArgs()` as an empty array
+- `getTitle()` from the failure class's simple name
+- `getErrorCode()` as the failure class name converted to upper snake case
+- `getExtensions()` as an empty map
 
-Implement the framework-agnostic `Failure` interface for automatic Spring integration. A sealed
-domain-error hierarchy keeps the possible failures explicit:
-
-```java
-public sealed interface UserFailure extends Failure {
-
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    record NotFound(Long userId) implements UserFailure {
-        @Override
-        public String getMessage() {
-            return "User " + this.userId + " not found";
-        }
-
-        @Override
-        public String getTitle() {
-            return "Not Found";
-        }
-
-        @Override
-        public Map<String, Object> getExtensions() {
-            return Map.of("userId", this.userId);
-        }
-    }
-
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    record ValidationFailed(Map<String, String> errors) implements UserFailure {
-
-        @Override
-        public String getMessage() {
-            return "Validation failed";
-        }
-
-        @Override
-        public String getTitle() {
-            return "Bad Request";
-        }
-
-        @Override
-        public Map<String, Object> getExtensions() {
-            return Map.of("errors", this.errors);
-        }
-    }
-
-    @ResponseStatus(HttpStatus.CONFLICT)
-    record EmailExists(String email) implements UserFailure {
-        @Override
-        public String getMessage() {
-            return "Email " + this.email + " is already in use";
-        }
-
-        @Override
-        public Map<String, Object> getExtensions() {
-            return Map.of("email", this.email);
-        }
-    }
-}
-```
-
-For localization, define `error.<FailureSimpleName>` and optionally
-`error.title.<FailureSimpleName>` message keys. `getMessageArgs()` supplies interpolation values;
-missing keys fall back to `getMessage()` and `getTitle()`.
-
-### Controller Example
-
-Controllers return `Result<T, E>` directly. `ResponseEntity<Result<T, E>>` is also supported when
-headers or an outer success status are needed. `Result<ResponseEntity<T>, E>` is not treated specially.
-
-```java
-@RestController
-@RequestMapping("/users")
-public class UserController {
-
-    private final UserService userService;
-
-    @GetMapping("/{id}")
-    public Result<UserDTO, UserFailure> getUser(@PathVariable Long id) {
-        return this.userService.findById(id)
-            .map(user -> new UserDTO(user.getId(), user.getEmail()));
-    }
-
-    @PostMapping
-    public Result<UserDTO, UserFailure> createUser(@RequestBody CreateUserRequest req) {
-        return Validator.of(req)
-            .required(CreateUserRequest::email, "email")
-            .matches(CreateUserRequest::email, ".*@.*", "email", "Invalid email")
-            .result()
-            .mapErr(errors -> new UserFailure.ValidationFailed(errors))
-            .andThen(validReq -> this.userService.create(validReq))
-            .map(user -> new UserDTO(user.getId(), user.getEmail()));
-    }
-}
-```
-
-### RFC 7807 Problem Details Output
-
-On error, the advice automatically returns a Problem Details response:
-
-```json
-{
-  "type": "about:blank",
-  "title": "Not Found",
-  "status": 404,
-  "detail": "User 123 not found",
-  "instance": "/users/123",
-  "errorCode": "NOT_FOUND",
-  "userId": 123
-}
-```
-
-For validation errors:
-
-```json
-{
-  "type": "about:blank",
-  "title": "Bad Request",
-  "status": 400,
-  "detail": "Validation failed",
-  "instance": "/users",
-  "errorCode": "VALIDATION_FAILED",
-  "errors": {
-    "email": "Invalid email format",
-    "name": "Length must be between 1 and 100"
-  }
-}
-```
-
-## Contributing
-
-Contributions are welcome. To develop:
-
-1. Clone the repository
-2. Build with Gradle: `./gradlew build`
-3. Run tests: `./gradlew test`
-4. Submit pull requests against the main branch
-
-Follow existing code style and include tests for new functionality.
+Problem details use `error.<FailureSimpleName>` for the localized detail and
+`error.title.<FailureSimpleName>` for the localized title. `getMessageArgs()` is supplied only to
+the detail message. Missing messages fall back to `getMessage()` and `getTitle()`.
 
 ## Examples And Benchmarks
 
-List the runnable examples:
+List the core examples:
 
 ```shell
 ./gradlew :result-core:examples
 ```
 
-Run one example with both implementations:
+Run the pipeline example:
 
 ```shell
 ./gradlew :result-core:examples -PexampleArgs='pipeline --impl=both'
 ```
 
-Run the JMH comparison of regular Java, `Result`, and heavily optimized Java:
+Run the JMH benchmark:
 
 ```shell
 ./gradlew :result-core:benchmark
 ```
 
-JMH options can be passed with `benchmarkArgs`, for example:
+The examples compare ordinary Java control flow with `Result` for file I/O, parsing, validation,
+recovery, combining values, and bulk processing. The benchmark compares vanilla Java,
+`Result`, and an intentionally optimized implementation across success and failure rates.
+
+## Development
 
 ```shell
-./gradlew :result-core:benchmark -PbenchmarkArgs='-f 1 -wi 3 -i 5'
+./gradlew build
+./gradlew test
 ```
 
-The benchmark covers successful input and approximately 1%, 10%, and 100% failure rates. It
-includes per-value pipelines and a batch-level comparison that returns one `Result` for the whole
-operation. Forked JVMs use a fixed 1 GiB heap and one benchmark thread.
-
-For repeatable local comparisons, stop competing workloads and pin the process to an otherwise idle
-CPU when the operating system supports it. On Linux, collect timing and normalized allocation data
-as JSON with:
-
-```shell
-taskset --cpu-list 2 ./gradlew --no-daemon :result-core:benchmark \
-  -PbenchmarkArgs='WithoutExceptions -prof gc -rf json -rff result.json'
-```
-
-The benchmarks are intended to track the runtime and allocation overhead
-introduced by Result relative to equivalent control flow. Performance
-thresholds are investigative rather than contractual and may vary by JVM,
-JIT state, and host.
-
-## License
-
-MIT License. See LICENSE file for details.
-
----
-
-For full API documentation, see the generated JavaDoc in each source file.
+The project is licensed under the MIT License. See [LICENSE](LICENSE).
