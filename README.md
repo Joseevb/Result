@@ -4,7 +4,7 @@ A modern, type-safe Result monad library for Java implementing Railway Oriented 
 
 [![Java 25+](https://img.shields.io/badge/Java-25%2B-blue)](https://adoptium.net/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Maven Central](https://img.shields.io/maven-central/v/dev.jose/result-core.svg)](https://central.sonatype.com/search?q=dev.jose)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.joseevb/result-core.svg)](https://central.sonatype.com/search?q=io.github.joseevb)
 
 ## Overview
 
@@ -39,7 +39,7 @@ Core library:
 
 ```kotlin
 dependencies {
-    implementation("dev.jose:result-core:0.1.0-SNAPSHOT")
+    implementation("io.github.joseevb:result-core:0.1.0")
 }
 ```
 
@@ -47,7 +47,7 @@ Spring Boot integration:
 
 ```kotlin
 dependencies {
-    implementation("dev.jose:result-springboot:0.1.0-SNAPSHOT")
+    implementation("io.github.joseevb:result-springboot:0.1.0")
 }
 ```
 
@@ -57,9 +57,9 @@ Core library:
 
 ```xml
 <dependency>
-    <groupId>dev.jose</groupId>
+    <groupId>io.github.joseevb</groupId>
     <artifactId>result-core</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
 </dependency>
 ```
 
@@ -67,9 +67,9 @@ Spring Boot integration:
 
 ```xml
 <dependency>
-    <groupId>dev.jose</groupId>
+    <groupId>io.github.joseevb</groupId>
     <artifactId>result-springboot</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
 </dependency>
 ```
 

@@ -13,8 +13,8 @@ subprojects {
   apply(plugin = "jacoco")
   apply(plugin = "com.diffplug.spotless")
 
-  group = "dev.jose"
-  version = "0.1.0-SNAPSHOT"
+	group = "io.github.joseevb"
+  version = "0.1.0"
 
   repositories {
     mavenCentral()
@@ -79,7 +79,7 @@ subprojects {
         pom {
           name.set(project.name)
           description.set("Result type library for Java")
-          url.set("https://github.com/jose/result")
+          url.set("https://github.com/Joseevb/Result")
 
           licenses {
             license {
@@ -90,16 +90,16 @@ subprojects {
 
           developers {
             developer {
-              id.set("jose")
-              name.set("Jose")
-              email.set("jose@example.com")
+              id.set("joseevb")
+              name.set("Jose Vasquez")
+              email.set("joseevb@protonmail.com")
             }
           }
 
           scm {
-            connection.set("scm:git:git://github.com/jose/result.git")
-            developerConnection.set("scm:git:ssh://github.com:jose/result.git")
-            url.set("https://github.com/jose/result")
+            connection.set("scm:git:git://github.com/Joseevb/Result")
+            developerConnection.set("scm:git:ssh://github.com/Joseevb/Result")
+            url.set("https://github.com/Joseevb/Result")
           }
         }
       }

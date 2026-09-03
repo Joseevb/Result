@@ -23,7 +23,7 @@ tasks.register<JavaExec>("examples") {
   description = "Runs the Result examples"
 
   classpath = examples.runtimeClasspath
-  mainClass = "dev.jose.result.examples.ResultExamples"
+  mainClass = "io.github.joseevb.result.examples.ResultExamples"
 
   args(
     providers.gradleProperty("exampleArgs")
@@ -38,7 +38,7 @@ tasks.register<JavaExec>("benchmark") {
   description = "Benchmarks vanilla Java, Result, and optimized Java implementations"
 
   classpath = examples.runtimeClasspath
-  mainClass = "dev.jose.result.examples.ResultBenchmark"
+  mainClass = "io.github.joseevb.result.examples.ResultBenchmark"
 
   args(
     providers.gradleProperty("benchmarkArgs")
