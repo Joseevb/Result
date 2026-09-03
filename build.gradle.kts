@@ -52,7 +52,7 @@ subprojects {
     violationRules {
       rule {
         limit {
-          minimum = "0.8".toBigDecimal()
+          minimum = "0.9".toBigDecimal()
         }
       }
 
@@ -123,6 +123,6 @@ subprojects {
   }
 
   tasks.named("check") {
-    dependsOn("spotlessCheck")
+    dependsOn("spotlessCheck", "jacocoTestCoverageVerification")
   }
 }
