@@ -337,6 +337,17 @@ class ResultTest {
     }
 
     @Test
+    @DisplayName("first Err is reused")
+    void collect_reusesFirstFailure() {
+      final Result<Integer, TestError> failure = Result.err(new TestError.Invalid("error"));
+
+      final Result<List<Integer>, TestError> result =
+          Result.collect(Stream.of(Result.ok(1), failure, Result.ok(3)));
+
+      assertSame(failure, result);
+    }
+
+    @Test
     @DisplayName("empty stream returns Ok with empty collection")
     void collect_emptyStream() {
       final Stream<Result<Integer, TestError>> stream = Stream.empty();
@@ -417,6 +428,17 @@ class ResultTest {
     }
 
     @Test
+    @DisplayName("first Err is reused")
+    void sequence_reusesFirstFailure() {
+      final Result<Integer, TestError> failure = Result.err(new TestError.Invalid("2"));
+
+      final Result<List<Integer>, TestError> result =
+          Result.sequence(List.of(Result.ok(1), failure, Result.ok(3)));
+
+      assertSame(failure, result);
+    }
+
+    @Test
     @DisplayName("Err at last position")
     void sequence_failureAtLast() {
       final List<Result<Integer, TestError>> list =
@@ -491,6 +513,7 @@ class ResultTest {
           Result.err(new TestError.Invalid("outer"));
       final Result<Integer, TestError> result = Result.flatten(nested);
       assertTrue(result.isErr());
+      assertSame(nested, result);
     }
   }
 
@@ -522,6 +545,16 @@ class ResultTest {
               });
       assertTrue(result.isErr());
       assertFalse(called.get());
+    }
+
+    @Test
+    @DisplayName("Err: reuses the immutable failure")
+    void map_failureReusesInstance() {
+      final Result<User, TestError> original = Result.err(new TestError.NotFound("1"));
+
+      final Result<String, TestError> result = original.map(User::name);
+
+      assertSame(original, result);
     }
 
     @Test
@@ -561,6 +594,7 @@ class ResultTest {
       final Result<User, String> result = original.mapErr(Object::toString);
       assertTrue(result.isOk());
       assertEquals("John", result.unwrap().name());
+      assertSame(original, result);
     }
 
     @Test
@@ -627,6 +661,16 @@ class ResultTest {
     }
 
     @Test
+    @DisplayName("Err: reuses the immutable failure")
+    void flatMap_failureReusesInstance() {
+      final Result<User, TestError> original = Result.err(new TestError.NotFound("1"));
+
+      final Result<String, TestError> result = original.andThen(user -> Result.ok(user.name()));
+
+      assertSame(original, result);
+    }
+
+    @Test
     @DisplayName("Ok: mapper returning Err propagates")
     void flatMap_mapperReturnsFailure() {
       final Result<User, TestError> original = Result.ok(new User("1", "John", 30));
@@ -662,19 +706,23 @@ class ResultTest {
     @Test
     @DisplayName("first Err: returns first Err")
     void combine_firstFailure() {
-      final Result<Integer, TestError> a = Result.err(new TestError.NotFound("1"));
+      final Result<String, TestError> a = Result.err(new TestError.NotFound("1"));
       final Result<Integer, TestError> b = Result.ok(20);
-      final Result<Integer, TestError> result = a.combine(b, Integer::sum);
+      final Result<Long, TestError> result =
+          a.combine(b, (text, number) -> (long) text.length() + number);
       assertTrue(result.isErr());
+      assertSame(a, result);
     }
 
     @Test
     @DisplayName("second Err: returns second Err")
     void combine_secondFailure() {
-      final Result<Integer, TestError> a = Result.ok(10);
+      final Result<String, TestError> a = Result.ok("value");
       final Result<Integer, TestError> b = Result.err(new TestError.NotFound("2"));
-      final Result<Integer, TestError> result = a.combine(b, Integer::sum);
+      final Result<Long, TestError> result =
+          a.combine(b, (text, number) -> (long) text.length() + number);
       assertTrue(result.isErr());
+      assertSame(b, result);
     }
 
     @Test

@@ -7,6 +7,7 @@ spring-dependency-management = "1.1.7"
 jspecify = "1.0.0"
 micrometer = "1.16.3"
 slf4j = "2.0.17"
+jmh = "1.37"
 
 [libraries]
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
@@ -22,6 +23,8 @@ jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
 
 micrometer-core = { module = "io.micrometer:micrometer-core", version.ref = "micrometer" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+jmh-core = { module = "org.openjdk.jmh:jmh-core", version.ref = "jmh" }
+jmh-generator-annprocess = { module = "org.openjdk.jmh:jmh-generator-annprocess", version.ref = "jmh" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

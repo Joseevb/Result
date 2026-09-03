@@ -583,6 +583,50 @@ Contributions are welcome. To develop:
 
 Follow existing code style and include tests for new functionality.
 
+## Examples And Benchmarks
+
+List the runnable examples:
+
+```shell
+./gradlew :result-core:examples
+```
+
+Run one example with both implementations:
+
+```shell
+./gradlew :result-core:examples -PexampleArgs='pipeline --impl=both'
+```
+
+Run the JMH comparison of regular Java, `Result`, and heavily optimized Java:
+
+```shell
+./gradlew :result-core:benchmark
+```
+
+JMH options can be passed with `benchmarkArgs`, for example:
+
+```shell
+./gradlew :result-core:benchmark -PbenchmarkArgs='-f 1 -wi 3 -i 5'
+```
+
+The benchmark covers successful input and approximately 1%, 10%, and 100% failure rates. It
+includes per-value pipelines and a batch-level comparison that returns one `Result` for the whole
+operation. Forked JVMs use a fixed 1 GiB heap and one benchmark thread.
+
+For repeatable local comparisons, stop competing workloads and pin the process to an otherwise idle
+CPU when the operating system supports it. On Linux, collect timing and normalized allocation data
+as JSON with:
+
+```shell
+taskset --cpu-list 2 ./gradlew --no-daemon :result-core:benchmark \
+  -PbenchmarkArgs='WithoutExceptions -prof gc -rf json -rff result.json'
+```
+
+The benchmarks are intended to track the runtime and allocation overhead
+introduced by Result relative to equivalent control flow. Performance
+thresholds are investigative rather than contractual and may vary by JVM,
+JIT state, and host.
+
 ## License
 
 MIT License. See LICENSE file for details.

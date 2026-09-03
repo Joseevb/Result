@@ -142,8 +142,8 @@ public sealed interface Result<T, E> {
       final Result<T, E> result = iterator.next();
       switch (result) {
         case Ok(var val) -> accAction.accept(accumulator, val);
-        case Err(var err) -> {
-          return err(err);
+        case Err(_) -> {
+          return widenErr(result);
         }
       }
     }
@@ -195,8 +195,8 @@ public sealed interface Result<T, E> {
     for (final Result<T, E> result : results) {
       switch (result) {
         case Ok(var val) -> values.add(val);
-        case Err(var err) -> {
-          return err(err);
+        case Err(_) -> {
+          return widenErr(result);
         }
       }
     }
@@ -222,7 +222,7 @@ public sealed interface Result<T, E> {
   static <T, E> Result<T, E> flatten(Result<Result<T, E>, E> nested) {
     return switch (nested) {
       case Ok(var inner) -> inner;
-      case Err(var err) -> err(err);
+      case Err(_) -> widenErr(nested);
     };
   }
 
@@ -240,7 +240,7 @@ public sealed interface Result<T, E> {
   default <U> Result<U, E> map(Function<? super T, ? extends U> mapper) {
     return switch (this) {
       case Ok(var val) -> ok(mapper.apply(val));
-      case Err(var err) -> err(err);
+      case Err(_) -> widenErr(this);
     };
   }
 
@@ -259,7 +259,7 @@ public sealed interface Result<T, E> {
   /// @return A new Result containing the original value or the transformed error.
   default <F> Result<T, F> mapErr(Function<? super E, ? extends F> mapper) {
     return switch (this) {
-      case Ok(var val) -> ok(val);
+      case Ok(_) -> widenOk(this);
       case Err(var err) -> err(mapper.apply(err));
     };
   }
@@ -304,8 +304,28 @@ public sealed interface Result<T, E> {
   default <U> Result<U, E> andThen(Function<? super T, ? extends Result<U, E>> mapper) {
     return switch (this) {
       case Ok(var val) -> Objects.requireNonNull(mapper.apply(val), "andThen mapper returned null");
-      case Err(var err) -> err(err);
+      case Err(_) -> widenErr(this);
     };
+  }
+
+  /// Safely widens the absent success type of an [Err].
+  ///
+  /// This cast is safe because [Err] stores no value of its success type `T`.
+  /// Result variants are immutable, so the same [Err] instance can be reused
+  /// for any success type.
+  @SuppressWarnings("unchecked")
+  private static <T, E> Result<T, E> widenErr(Result<?, E> result) {
+    return (Result<T, E>) result;
+  }
+
+  /// Safely widens the absent error type of an [Ok].
+  ///
+  /// This cast is safe because [Ok] stores no value of its error type `E`.
+  /// Result variants are immutable, so the same [Ok] instance can be reused
+  /// for any error type.
+  @SuppressWarnings("unchecked")
+  private static <T, E> Result<T, E> widenOk(Result<T, ?> result) {
+    return (Result<T, E>) result;
   }
 
   /// Combines this Result with another independent Result.
@@ -320,10 +340,10 @@ public sealed interface Result<T, E> {
   default <U, V> Result<V, E> combine(
       Result<U, E> other, BiFunction<? super T, ? super U, ? extends V> combiner) {
     return switch (this) {
-      case Err(var err) -> err(err); // Fail fast
+      case Err(_) -> widenErr(this); // Fail fast
       case Ok(var t) ->
           switch (other) {
-            case Err(var err) -> err(err);
+            case Err(_) -> widenErr(other);
             case Ok(var u) -> ok(combiner.apply(t, u));
           };
     };
