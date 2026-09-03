@@ -1,0 +1,33 @@
+gradle/libs.versions.toml
+  s_840c79a641fdc5::t_caefb93d72b4ce 10,26-27
+result-core/build.gradle.kts
+  s_840c79a641fdc5::t_bc9d77e26d6324 4-49
+result-core/src/examples/java/dev/jose/result/examples/ResultExamples.java
+  s_840c79a641fdc5::t_4c25cd1fa1f825 1-720
+result-core/src/test/java/dev/jose/result/ResultTest.java
+  s_fe03f24350d413::t_facbd5ea379d2d 339-349,430-440,516,550-559,597,663-672,709,711-712,714,720,722-723,725
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "2d08ca438d48f77f854efb984fc07d82a5abdfa4",
+  "prompts": {},
+  "sessions": {
+    "s_840c79a641fdc5": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f9e563a28ffeHkqIV121G3RSLX",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "Jose Esteban Vasquez Barboza <joseevb@protonmail.com>"
+    },
+    "s_fe03f24350d413": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f9e1b4a0cffexi6ZLRAbo5wvif",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "Jose Esteban Vasquez Barboza <joseevb@protonmail.com>"
+    }
+  }
+}
