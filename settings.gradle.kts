@@ -9,3 +9,4 @@ pluginManagement {
 
 include("result-core")
 include("result-springboot")
+include("result-yavi")
