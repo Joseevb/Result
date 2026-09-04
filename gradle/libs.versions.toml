@@ -8,11 +8,12 @@ jspecify = "1.0.0"
 micrometer = "1.16.3"
 slf4j = "2.0.17"
 jmh = "1.37"
+yavi = "0.17.0"
 
 [libraries]
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
-junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+junit-platform-launcher = { module = "org.junit:junit-platform-launcher" }
 
 spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
 spring-boot-starter = { module = "org.springframework.boot:spring-boot-starter" }
@@ -25,6 +26,7 @@ micrometer-core = { module = "io.micrometer:micrometer-core", version.ref = "mic
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 jmh-core = { module = "org.openjdk.jmh:jmh-core", version.ref = "jmh" }
 jmh-generator-annprocess = { module = "org.openjdk.jmh:jmh-generator-annprocess", version.ref = "jmh" }
+yavi = { module = "am.ik.yavi:yavi", version.ref = "yavi" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
