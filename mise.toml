@@ -1,0 +1,17 @@
+[tools]
+java = "25"
+
+[env]
+_.file = ".env.toml"
+
+[tasks.test]
+run = "./gradlew test"
+
+[tasks.build]
+run = "./gradlew build"
+
+[tasks.publish-local]
+run = "./gradlew publishToMavenLocal --no-configuration-cache"
+
+[tasks.publish]
+run = "./gradlew publishToMavenCentral --no-configuration-cache"
