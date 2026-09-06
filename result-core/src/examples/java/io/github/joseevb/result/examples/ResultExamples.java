@@ -364,22 +364,22 @@ public final class ResultExamples {
   private static Outcome workflowResult(Fixture fixture) {
 
     final Result<Report, DemoError> result =
-        readText(fixture.path("username.txt"))
-            .map(String::strip)
-            .andThen(
-                username ->
-                    readText(fixture.path("port.txt"))
-                        .andThen(raw -> parseInteger(raw, "port"))
-                        .andThen(ResultExamples::validatePort)
-                        .map(port -> new ServiceConfig(username, port)))
-            .andThen(
-                config ->
-                    Result.collect(fixture.partFiles(false).stream().map(ResultExamples::readText))
-                        .map(ResultExamples::summarize)
-                        .map(
-                            batch ->
-                                new Report(
-                                    config, batch.files(), batch.lines(), batch.characters())));
+        Result.gen(
+            $ -> {
+              final var username = $.bind(readText(fixture.path("username.txt"))).strip();
+              final var rawPort = $.bind(readText(fixture.path("port.txt")));
+              final var parsedPort = $.bind(parseInteger(rawPort, "port"));
+              final var port = $.bind(validatePort(parsedPort));
+              final var config = new ServiceConfig(username, port);
+
+              final var contents =
+                  $.bind(
+                      Result.collect(
+                          fixture.partFiles(false).stream().map(ResultExamples::readText)));
+              final var batch = summarize(contents);
+
+              return new Report(config, batch.files(), batch.lines(), batch.characters());
+            });
 
     return result.fold(
         report -> Outcome.ok(report.toString(), report.characters()), Outcome::error);
