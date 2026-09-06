@@ -10,11 +10,13 @@ YAVI integration.
 
 ## Installation
 
+`result-yavi` is introduced in Result 0.2.0.
+
 Gradle:
 
 ```kotlin
 dependencies {
-    implementation("io.github.joseevb:result-yavi:0.1.0")
+    implementation("io.github.joseevb:result-yavi:0.2.0")
 }
 ```
 
@@ -24,7 +26,7 @@ Maven:
 <dependency>
     <groupId>io.github.joseevb</groupId>
     <artifactId>result-yavi</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
