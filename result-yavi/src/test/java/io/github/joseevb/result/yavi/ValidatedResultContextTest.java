@@ -47,8 +47,7 @@ class ValidatedResultContextTest {
 
     assertInstanceOf(Result.Ok.class, relaxedResult);
     assertEquals(
-        "name",
-        assertInstanceOf(Result.Err.class, strictResult).error().getFirst().name());
+        "name", assertInstanceOf(Result.Err.class, strictResult).error().getFirst().name());
   }
 
   @Test
