@@ -139,11 +139,13 @@ public sealed interface Result<T, E> {
   /// });
   /// ```
   ///
-  /// The scope is valid only while `generator` is running. Do not catch [RuntimeException] around
-  /// `bind`: fail-fast control flow uses a private RuntimeException which this method handles.
-  /// Exceptions thrown by application code otherwise propagate unchanged.
+  /// The scope is valid only while `generator` is running. Do not catch [Error] or [Throwable]
+  /// around `bind`: fail-fast control flow uses a private Error which this method handles.
+  /// Exceptions and errors thrown by application code otherwise propagate unchanged.
   ///
-  /// Use `Result.<DomainError>gen().run(...)` when `var` should retain a chosen shared error type.
+  /// Supply both method types with `Result.<Cart, DomainError>gen(...)` to use `var` without a
+  /// staged call. Use `Result.<DomainError>gen().run(...)` to specify only the error type while
+  /// inferring the successful type.
   ///
   /// @param generator The generator block to execute.
   /// @param <T> The successful value returned by the block.
@@ -722,7 +724,7 @@ final class ResultGenScope<E> implements Result.GenScope<E> {
   }
 }
 
-final class ResultGenAbort extends RuntimeException {
+final class ResultGenAbort extends Error {
   ResultGenAbort() {
     super(null, null, false, false);
   }
