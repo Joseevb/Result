@@ -21,6 +21,9 @@ public final class ValidatedResult {
   /// @return the equivalent Result
   public static <T> Result<T, ConstraintViolations> from(Validated<? extends T> validated) {
     Objects.requireNonNull(validated, "validated cannot be null");
-    return validated.isValid() ? Result.ok(validated.value()) : Result.err(validated.errors());
+    return validated.isValid()
+        ? Result.ok(
+            Objects.requireNonNull(validated.valueNullable(), "validated value cannot be null"))
+        : Result.err(validated.errors());
   }
 }
