@@ -36,8 +36,7 @@ class ValidatedResultIntegrationTest {
     final Result<User, ConstraintViolations> result =
         ValidatedResult.from(USER_ARGUMENTS.validate("", "invalid", 15));
 
-    final Result.Err<User, ConstraintViolations> err =
-        assertInstanceOf(Result.Err.class, result);
+    final Result.Err<User, ConstraintViolations> err = assertInstanceOf(Result.Err.class, result);
     assertEquals(3, err.error().size());
     assertEquals("name", err.error().get(0).name());
     assertEquals("email", err.error().get(1).name());

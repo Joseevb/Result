@@ -29,7 +29,7 @@ public final class ValidatedResultExamples {
           .constraint(User::age, "age", c -> c.greaterThanOrEqual(18))
           .build();
 
-  public static void main(String... _) {
+  public static void main(String... args) {
     final Result<User, ConstraintViolations> constructed =
         ValidatedResult.from(USER_ARGUMENTS.validate("Jose", "jose@example.com", 21));
 
