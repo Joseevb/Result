@@ -6,10 +6,6 @@ plugins {
   id("com.diffplug.spotless") version "8.3.0" apply false
 }
 
-repositories {
-  mavenCentral()
-}
-
 subprojects {
   apply(plugin = "java-library")
   apply(plugin = "maven-publish")
