@@ -46,8 +46,9 @@ class ValidatedResultContextTest {
         ValidatedResult.validate(user, CONTEXTUAL_VALIDATOR, strict);
 
     assertInstanceOf(Result.Ok.class, relaxedResult);
-    assertEquals(
-        "name", assertInstanceOf(Result.Err.class, strictResult).error().getFirst().name());
+    final Result.Err<User, ConstraintViolations> err =
+        assertInstanceOf(Result.Err.class, strictResult);
+    assertEquals("name", err.error().getFirst().name());
   }
 
   @Test
