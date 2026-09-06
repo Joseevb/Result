@@ -208,7 +208,19 @@ Result<Cart, CartError> result = Result.gen($ -> {
 });
 ```
 
-When the local variable should use `var`, select that error type with the staged overload:
+Using `var` without `.run()` is also possible by supplying both method type arguments:
+
+```java
+var result = Result.<Cart, CartError>gen($ -> {
+    var user = $.bind(getUser(id));
+    var products = $.bind(getProducts(user.id()));
+
+    return new Cart(user, products);
+});
+// result is Result<Cart, CartError>
+```
+
+When `var` should infer the successful type, select only the error type with the staged overload:
 
 ```java
 var result = Result.<CartError>gen().run($ -> {
@@ -226,9 +238,10 @@ but Java requires the shared nominal type to be declared by the application. For
 use the direct `var` form and handle `Object`, map errors to an application error before binding, or
 introduce a shared domain error type.
 
-The generator scope is valid only during its block. Application exceptions propagate normally.
-Avoid catching `RuntimeException` around `bind`, because fail-fast behavior uses a private,
-stackless control-flow exception internally. Generated values and bound Results must be non-null.
+The generator scope is valid only during its block. Application exceptions and errors propagate
+normally. Avoid catching `Error` or `Throwable` around `bind`, because fail-fast behavior uses a
+private, stackless control-flow error internally. Generated values and bound Results must be
+non-null.
 See [Generator-style Result composition](docs/generator-composition.md) for the Java inference
 details and the alternatives considered.
 

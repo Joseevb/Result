@@ -101,6 +101,21 @@ class ResultGenTest {
     }
 
     @Test
+    @DisplayName("uses a complete method type witness with var and no staged call")
+    void gen_usesCompleteTypeWitness() {
+      final var result =
+          Result.<Cart, CartError>gen(
+              $ -> {
+                final var user = $.bind(findCartUser("42"));
+                final var products = $.bind(findCartProducts(user.id()));
+                return new Cart(user, products);
+              });
+
+      final Result<Cart, CartError> witnessedType = result;
+      assertTrue(witnessedType.isOk());
+    }
+
+    @Test
     @DisplayName("returns the first error and does not evaluate later statements")
     void gen_firstErrShortCircuits() {
       final var missing = new MissingUser("42");
@@ -121,7 +136,29 @@ class ResultGenTest {
     }
 
     @Test
-    @DisplayName("does not let an accidentally caught bind failure become Ok")
+    @DisplayName("ordinary exception handlers do not intercept bind control flow")
+    void gen_exceptionHandlerDoesNotCatchAbort() {
+      final var missing = new MissingUser("42");
+      final var caught = new AtomicBoolean(false);
+
+      final Result<Integer, UserError> result =
+          Result.gen(
+              $ -> {
+                try {
+                  $.bind(Result.<User, UserError>err(missing));
+                } catch (RuntimeException _) {
+                  caught.set(true);
+                }
+                return 1;
+              });
+
+      assertTrue(result.isErr());
+      assertFalse(caught.get());
+      assertSame(missing, ((Result.Err<Integer, UserError>) result).error());
+    }
+
+    @Test
+    @DisplayName("does not let a broadly caught bind signal become Ok")
     void gen_caughtAbortStillReturnsErr() {
       final var missing = new MissingUser("42");
 
@@ -130,9 +167,8 @@ class ResultGenTest {
               $ -> {
                 try {
                   $.bind(Result.<User, UserError>err(missing));
-                } catch (RuntimeException _) {
-                  // Application code should not catch around bind, but the error must not
-                  // disappear.
+                } catch (Throwable _) {
+                  // Catching Throwable around bind is unsupported, but the error cannot disappear.
                 }
                 return 1;
               });
@@ -142,20 +178,30 @@ class ResultGenTest {
     }
 
     @Test
-    @DisplayName("propagates application exceptions unchanged")
-    void gen_propagatesApplicationException() {
-      final var problem = new IllegalArgumentException("boom");
+    @DisplayName("propagates application exceptions and errors unchanged")
+    void gen_propagatesApplicationThrowables() {
+      final var exception = new IllegalArgumentException("boom");
+      final var error = new AssertionError("fatal");
 
-      final var thrown =
+      final var thrownException =
           assertThrows(
               IllegalArgumentException.class,
               () ->
                   Result.gen(
                       $ -> {
-                        throw problem;
+                        throw exception;
+                      }));
+      final var thrownError =
+          assertThrows(
+              AssertionError.class,
+              () ->
+                  Result.gen(
+                      $ -> {
+                        throw error;
                       }));
 
-      assertSame(problem, thrown);
+      assertSame(exception, thrownException);
+      assertSame(error, thrownError);
     }
 
     @Test

@@ -35,9 +35,23 @@ Result<Cart, CartError> result = Result.gen($ -> {
 
 The compiler then rejects any bound Result whose error does not extend `CartError`.
 
+The complete method type arguments can be supplied when `var` is preferred without a staged call:
+
+```java
+var result = Result.<Cart, CartError>gen($ -> {
+    var user = $.bind(getUser(id));
+    var products = $.bind(getProducts(user.id()));
+    return new Cart(user, products);
+});
+```
+
+This keeps the exact `Result<Cart, CartError>` type, at the cost of spelling both the success and
+error types.
+
 ## Staged form
 
-The staged overload moves the error type witness before the lambda and therefore works with `var`:
+The staged overload fixes only the error type before the lambda and therefore lets `var` infer the
+success type:
 
 ```java
 var result = Result.<CartError>gen().run($ -> {
@@ -68,11 +82,12 @@ the selected `E`.
 ## Runtime behavior
 
 `bind` returns the value of an `Ok`. For an `Err`, it records the error and throws a private,
-stackless control-flow exception which `Result.gen` catches. Each scope has its own signal, allowing
-nested generators to propagate the correct outer failure. Application exceptions are not converted
-to domain errors.
+stackless control-flow Error which `Result.gen` catches. Extending `Error` keeps ordinary
+`catch (Exception)` blocks and `Result.from` from intercepting the signal. Each scope has its own
+signal, allowing nested generators to propagate the correct outer failure. Application exceptions
+and errors are not converted to domain errors.
 
 The scope is valid only for the dynamic extent of its generator. Because Java cannot provide an
-uncatchable control-flow signal, application code must not catch `RuntimeException` or `Throwable`
-around `bind`. If it does catch the internal signal, `gen` still returns the recorded `Err`, but code
-inside that catch boundary may already have run and strict short-circuiting cannot be guaranteed.
+uncatchable control-flow signal, application code must not catch `Error` or `Throwable` around
+`bind`. If it does catch the internal signal, `gen` still returns the recorded `Err`, but code inside
+that catch boundary may already have run and strict short-circuiting cannot be guaranteed.
