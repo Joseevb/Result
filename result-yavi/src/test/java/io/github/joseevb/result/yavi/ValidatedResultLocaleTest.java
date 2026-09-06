@@ -44,6 +44,6 @@ class ValidatedResultLocaleTest {
   void rejectsNullLocale() {
     assertThrows(
         NullPointerException.class,
-        () -> ValidatedResult.validate(new User("Jose"), USER_VALIDATOR, null));
+        () -> ValidatedResult.validate(new User("Jose"), USER_VALIDATOR, (Locale) null));
   }
 }
