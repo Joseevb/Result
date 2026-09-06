@@ -174,6 +174,63 @@ Result<String, String> combined = Result.ok("user").combine(
 );
 ```
 
+### Generator-Style Composition
+
+`Result.gen` composes sequential Results with imperative control flow. `bind` unwraps an `Ok`; the
+first `Err` exits the block immediately, so later statements are not evaluated:
+
+```java
+Result<User, UserError> getUser(String id) { /* ... */ }
+Result<List<Product>, ProductError> getProducts(String userId) { /* ... */ }
+
+var result = Result.gen($ -> {
+    var user = $.bind(getUser("42"));
+    var products = $.bind(getProducts(user.id()));
+    return new Cart(user, products);
+});
+```
+
+Java has no general-purpose union types, and `javac` does not accumulate the nested `bind` error
+types into the type parameters of the enclosing lambda invocation. On Java 25, the exact inferred
+type above is therefore:
+
+```java
+Result<Cart, Object>
+```
+
+This form is type-safe and accepts unrelated error types, but handling the error requires ordinary
+`instanceof` or pattern matching on `Object`.
+
+When errors share a domain supertype, use an explicit target type to retain it and have every
+`bind` checked against it:
+
+```java
+sealed interface CartError permits UserError, ProductError {}
+record UserError(String id) implements CartError {}
+record ProductError(String userId) implements CartError {}
+
+Result<Cart, CartError> result = Result.gen($ -> {
+    var user = $.bind(getUser("42"));
+    var products = $.bind(getProducts(user.id()));
+    return new Cart(user, products);
+});
+```
+
+To keep `var` at the result declaration, select the error type with the staged overload:
+
+```java
+var result = Result.<CartError>gen().run($ -> {
+    var user = $.bind(getUser("42"));
+    var products = $.bind(getProducts(user.id()));
+    return new Cart(user, products);
+});
+// Result<Cart, CartError>
+```
+
+Both forms scale to any number of sequential binds. The implementation uses a private control-flow
+signal to leave the lambda, but business errors remain values in `Result`; exceptions and errors
+thrown by application code are not captured. Do not catch `Throwable` or `Error` around `bind`.
+
 ### Recovery and Inspection
 
 ```java

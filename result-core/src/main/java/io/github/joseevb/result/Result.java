@@ -73,6 +73,100 @@ public sealed interface Result<T, E> {
     return ok(Unit.INSTANCE);
   }
 
+  /// Runs an imperative-style block that can bind sequential [Result] values.
+  ///
+  /// [Gen#bind(Result)] unwraps an [Ok]. When it receives an [Err], evaluation exits immediately
+  /// and this method returns that error. The error type `E` is checked against every bound Result.
+  ///
+  /// With `var`, Java infers `Object` for `E` because constraints inside an implicitly typed lambda
+  /// do not accumulate into a union type:
+  /// ```java
+  /// var result = Result.gen($ -> {
+  ///   var user = $.bind(findUser());
+  ///   var products = $.bind(findProducts(user));
+  ///   return new Cart(user, products);
+  /// });
+  /// // Result<Cart, Object>
+  /// ```
+  ///
+  /// Use an explicit target type or [#gen()] when all errors share a useful supertype.
+  ///
+  /// @param body the generator body
+  /// @param <T> the generated success type
+  /// @param <E> a supertype of every bound error
+  /// @return an `Ok` with the body value, or the first bound `Err`
+  static <T, E> Result<T, E> gen(GenFunction<T, E> body) {
+    return runGen(body);
+  }
+
+  /// Starts a generator with an explicit error type while leaving the success type inferred.
+  ///
+  /// This form is useful with `var` when all errors implement a shared domain error type:
+  /// ```java
+  /// var result = Result.<CartError>gen().run($ -> {
+  ///   var user = $.bind(findUser());
+  ///   var products = $.bind(findProducts(user));
+  ///   return new Cart(user, products);
+  /// });
+  /// // Result<Cart, CartError>
+  /// ```
+  ///
+  /// @param <E> a supertype of every error that will be bound
+  /// @return a generator builder fixed to `E`
+  static <E> GenBuilder<E> gen() {
+    return new GenBuilder<>();
+  }
+
+  private static <T, E> Result<T, E> runGen(GenFunction<T, E> body) {
+    Objects.requireNonNull(body, "Result.gen body cannot be null");
+
+    final class Abort extends Error {
+      private Abort() {
+        super(null, null, false, false);
+      }
+    }
+
+    final class Scope implements Gen<E> {
+      private final Abort abort = new Abort();
+      private @Nullable E failure;
+
+      @Override
+      public <U, F extends E> U bind(Result<U, F> result) {
+        Objects.requireNonNull(result, "Result.gen bind cannot be null");
+        if (failure != null) {
+          throw abort;
+        }
+
+        return switch (result) {
+          case Ok(var value) -> value;
+          case Err(var error) -> {
+            failure = error;
+            throw abort;
+          }
+        };
+      }
+
+      private boolean failed() {
+        return failure != null;
+      }
+
+      private E failure() {
+        return Objects.requireNonNull(failure, "Result.gen aborted without an error");
+      }
+    }
+
+    final var scope = new Scope();
+    try {
+      final T value = body.apply(scope);
+      return scope.failed() ? err(scope.failure()) : ok(value);
+    } catch (final Abort abort) {
+      if (abort != scope.abort) {
+        throw abort;
+      }
+      return err(scope.failure());
+    }
+  }
+
   /// Executes a supplier and captures thrown [Exception] instances as `Err`.
   ///
   /// `Error` instances are deliberately not caught. A supplier returning `null` also fails
@@ -545,6 +639,51 @@ public sealed interface Result<T, E> {
       case Ok(var val) -> Optional.of(val);
       case Err(_) -> Optional.empty();
     };
+  }
+
+  /// The binding capability supplied to a [#gen(GenFunction)] block.
+  ///
+  /// A bound error must be a subtype of `E`. This bound is what makes an explicitly typed or staged
+  /// generator type-safe.
+  ///
+  /// @param <E> a supertype of every error accepted by this generator
+  interface Gen<E> {
+    /// Unwraps an `Ok`, or aborts the enclosing generator with an `Err`.
+    ///
+    /// @param result the Result to bind
+    /// @param <U> the bound success type
+    /// @param <F> the bound error type
+    /// @return the `Ok` value
+    <U, F extends E> U bind(Result<U, F> result);
+  }
+
+  /// A generator body that returns a success value and binds Results through [Gen].
+  ///
+  /// @param <T> the generated success type
+  /// @param <E> a supertype of every bound error
+  @FunctionalInterface
+  interface GenFunction<T, E> {
+    /// Evaluates the generator body.
+    ///
+    /// @param $ the binding scope
+    /// @return the generated success value
+    T apply(Gen<E> $);
+  }
+
+  /// A staged generator whose error type has already been selected.
+  ///
+  /// @param <E> a supertype of every error accepted by this generator
+  final class GenBuilder<E> {
+    private GenBuilder() {}
+
+    /// Runs a generator body using this builder's error type.
+    ///
+    /// @param body the generator body
+    /// @param <T> the generated success type
+    /// @return an `Ok` with the body value, or the first bound `Err`
+    public <T> Result<T, E> run(GenFunction<T, E> body) {
+      return Result.runGen(body);
+    }
   }
 
   /// A functional interface for suppliers that can throw checked exceptions.
