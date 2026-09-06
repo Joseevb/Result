@@ -67,6 +67,8 @@ class ValidatedResultContextTest {
   void rejectsNullContext() {
     assertThrows(
         NullPointerException.class,
-        () -> ValidatedResult.validate(new User("Jose"), CONTEXTUAL_VALIDATOR, null));
+        () ->
+            ValidatedResult.validate(
+                new User("Jose"), CONTEXTUAL_VALIDATOR, (ConstraintContext) null));
   }
 }
