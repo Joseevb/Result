@@ -43,8 +43,7 @@ class ValidatedResultValidateTest {
 
     final Result<User, ConstraintViolations> result = ValidatedResult.validate(user, validator);
 
-    final Result.Err<User, ConstraintViolations> err =
-        assertInstanceOf(Result.Err.class, result);
+    final Result.Err<User, ConstraintViolations> err = assertInstanceOf(Result.Err.class, result);
     assertSame(violations, err.error());
     assertEquals(3, err.error().size());
   }
@@ -53,8 +52,7 @@ class ValidatedResultValidateTest {
   @SuppressWarnings("all")
   void leavesNullTargetHandlingToYavi() {
     assertThrows(
-        IllegalArgumentException.class,
-        () -> ValidatedResult.validate(null, USER_VALIDATOR));
+        IllegalArgumentException.class, () -> ValidatedResult.validate(null, USER_VALIDATOR));
   }
 
   @Test
@@ -62,8 +60,6 @@ class ValidatedResultValidateTest {
   void rejectsNullValidator() {
     final User user = new User("Jose", "jose@example.com", 21);
 
-    assertThrows(
-        NullPointerException.class,
-        () -> ValidatedResult.validate(user, null));
+    assertThrows(NullPointerException.class, () -> ValidatedResult.validate(user, null));
   }
 }
