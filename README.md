@@ -397,11 +397,12 @@ the detail message. Missing messages fall back to `getMessage()` and `getTitle()
 
 ## YAVI Integration
 
-For applications that need YAVI's richer validation model, use the optional `result-yavi` artifact:
+For applications that need YAVI's richer validation model, use the optional `result-yavi` artifact,
+introduced in Result 0.2.0:
 
 ```kotlin
 dependencies {
-    implementation("io.github.joseevb:result-yavi:0.1.0")
+    implementation("io.github.joseevb:result-yavi:0.2.0")
 }
 ```
 
