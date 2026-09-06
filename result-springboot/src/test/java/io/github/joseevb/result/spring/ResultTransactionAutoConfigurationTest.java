@@ -28,6 +28,7 @@ import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.UnexpectedRollbackException;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -89,6 +90,13 @@ class ResultTransactionAutoConfigurationTest {
     }
 
     @Transactional
+    public Result<String, String> nestedRequiredRecovered() {
+      final Result<String, String> nestedResult = this.nested.errRequired();
+      this.insert("outer-required");
+      return nestedResult.recover(error -> "outer");
+    }
+
+    @Transactional
     public String plainTransactional() {
       this.insert("plain");
       return "plain";
@@ -129,6 +137,12 @@ class ResultTransactionAutoConfigurationTest {
 
     NestedService(JdbcTemplate jdbc) {
       this.jdbc = jdbc;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRED)
+    public Result<String, String> errRequired() {
+      this.jdbc.update("insert into events (name) values ('inner-required')");
+      return Result.err("failed");
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -255,6 +269,13 @@ class ResultTransactionAutoConfigurationTest {
     assertInstanceOf(Result.Ok.class, this.service.nestedRecovered());
     assertEquals(0, this.eventCount("inner"));
     assertEquals(1, this.eventCount("outer"));
+  }
+
+  @Test
+  void sharesRequiredPropagationAndUnexpectedRollbackOnRecovery() {
+    assertThrows(UnexpectedRollbackException.class, () -> this.service.nestedRequiredRecovered());
+    assertEquals(0, this.eventCount("inner-required"));
+    assertEquals(0, this.eventCount("outer-required"));
   }
 
   @Test

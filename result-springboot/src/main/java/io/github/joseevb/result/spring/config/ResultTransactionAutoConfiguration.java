@@ -62,6 +62,11 @@ public class ResultTransactionAutoConfiguration {
           return result;
         };
 
+    // The rollback interceptor must run inside Spring's TransactionInterceptor, so it needs lower
+    // precedence than the transaction advisor. Spring commonly uses Ordered.LOWEST_PRECEDENCE for
+    // that advisor and no lower-precedence value exists, so when Spring is already at
+    // LOWEST_PRECEDENCE the transaction advisor is shifted inward by one and the Result advisor is
+    // left at LOWEST_PRECEDENCE.
     final DefaultPointcutAdvisor advisor = new DefaultPointcutAdvisor(pointcut, interceptor);
     final int transactionOrder = transactionAdvisor.getOrder();
     if (transactionOrder == Ordered.LOWEST_PRECEDENCE) {
