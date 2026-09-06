@@ -4,6 +4,7 @@ import am.ik.yavi.core.ConstraintViolations;
 import am.ik.yavi.core.Validatable;
 import am.ik.yavi.core.Validated;
 import io.github.joseevb.result.Result;
+import java.util.Locale;
 import java.util.Objects;
 
 /// Adapts YAVI validation outcomes to [Result] without changing YAVI's error model.
@@ -37,7 +38,28 @@ public final class ValidatedResult {
   public static <T> Result<T, ConstraintViolations> validate(
       T target, Validatable<? super T> validator) {
     Objects.requireNonNull(validator, "validator cannot be null");
-    final ConstraintViolations violations = validator.validate(target);
+    return result(target, validator.validate(target));
+  }
+
+  /// Validates an existing value with YAVI using the supplied locale.
+  ///
+  /// The locale is passed directly to YAVI. Message lookup and localization therefore remain
+  /// entirely YAVI concerns; this adapter only preserves the returned [ConstraintViolations].
+  ///
+  /// @param target the value to validate
+  /// @param validator the YAVI validator to use
+  /// @param locale the locale YAVI should use for violation messages
+  /// @param <T> the value type
+  /// @return an Ok containing `target`, or an Err containing the violations returned by YAVI
+  public static <T> Result<T, ConstraintViolations> validate(
+      T target, Validatable<? super T> validator, Locale locale) {
+    Objects.requireNonNull(validator, "validator cannot be null");
+    Objects.requireNonNull(locale, "locale cannot be null");
+    return result(target, validator.validate(target, locale));
+  }
+
+  private static <T> Result<T, ConstraintViolations> result(
+      T target, ConstraintViolations violations) {
     return violations.isValid() ? Result.ok(target) : Result.err(violations);
   }
 }
