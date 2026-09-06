@@ -37,8 +37,7 @@ class ValidatedResultFromTest {
     final Result<Object, ConstraintViolations> result =
         ValidatedResult.from(Validated.failureWith(nameViolation, emailViolation));
 
-    final Result.Err<Object, ConstraintViolations> err =
-        assertInstanceOf(Result.Err.class, result);
+    final Result.Err<Object, ConstraintViolations> err = assertInstanceOf(Result.Err.class, result);
     assertEquals(2, err.error().size());
     assertSame(nameViolation, err.error().get(0));
     assertSame(emailViolation, err.error().get(1));
