@@ -22,6 +22,7 @@ class ValidatedResultIntegrationTest {
           ._integer("age", c -> c.greaterThanOrEqual(18))
           .apply(User::new);
 
+  @SuppressWarnings("unchecked")
   @Test
   void convertsSuccessfulArgumentValidation() {
     final Result<User, ConstraintViolations> result =
