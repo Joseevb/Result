@@ -395,6 +395,36 @@ Problem details use `error.<FailureSimpleName>` for the localized detail and
 `error.title.<FailureSimpleName>` for the localized title. `getMessageArgs()` is supplied only to
 the detail message. Missing messages fall back to `getMessage()` and `getTitle()`.
 
+## YAVI Integration
+
+For applications that need YAVI's richer validation model, use the optional `result-yavi` artifact,
+introduced in Result 0.2.0:
+
+```kotlin
+dependencies {
+    implementation("io.github.joseevb:result-yavi:0.2.0")
+}
+```
+
+`result-core` remains completely independent from YAVI. The built-in `Validator<T, E>` remains the
+simpler dependency-free option for small, local checks. `ValidatedResult` adapts YAVI's
+`Validated<T>` and `ConstraintViolations` into `Result` without translating YAVI's error model:
+
+```java
+ValidatedResult.from(USER_ARGUMENTS.validate(name, email, age));
+
+ValidatedResult.validate(user, USER_VALIDATOR)
+    .mapErr(UserError.Validation::new)
+    .andThen(service::createUser);
+```
+
+YAVI's `ConstraintViolations` are preserved as-is. Because `Result` forbids null payloads,
+`Validated.successWith(null)` cannot become `Ok(null)` and conversion fails with
+`NullPointerException` instead.
+
+See [YAVI integration](docs/yavi-integration.md) for the validation strategy, Maven coordinates, and
+full examples.
+
 ## Examples And Benchmarks
 
 List the core examples:
