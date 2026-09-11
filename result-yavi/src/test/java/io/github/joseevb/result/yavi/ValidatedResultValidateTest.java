@@ -31,6 +31,7 @@ class ValidatedResultValidateTest {
     final Result<User, ConstraintViolations> result =
         ValidatedResult.validate(user, USER_VALIDATOR);
 
+    @SuppressWarnings("unchecked")
     final Result.Ok<User, ConstraintViolations> ok = assertInstanceOf(Result.Ok.class, result);
     assertSame(user, ok.value());
   }
@@ -43,6 +44,7 @@ class ValidatedResultValidateTest {
 
     final Result<User, ConstraintViolations> result = ValidatedResult.validate(user, validator);
 
+    @SuppressWarnings("unchecked")
     final Result.Err<User, ConstraintViolations> err = assertInstanceOf(Result.Err.class, result);
     assertSame(violations, err.error());
     assertEquals(3, err.error().size());
