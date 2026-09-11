@@ -122,6 +122,73 @@ public sealed interface Result<T, E> {
     return optional.<Result<T, E>>map(Result::ok).orElseGet(() -> err(errorSupplier.get()));
   }
 
+  /// Composes dependent Results in an imperative-looking block and stops at the first `Err`.
+  ///
+  /// Java has no general-purpose union types, and calls made through a lambda parameter do not add
+  /// constraints to the enclosing method invocation. Consequently, `var` infers [Object] for `E`:
+  /// `Result<Cart, Object>` is the type-safe approximation of
+  /// `Result<Cart, UserError | ProductError>`. A target type can select a shared nominal error
+  /// supertype instead.
+  ///
+  /// # Example
+  /// ```java
+  /// var cart = Result.gen($ -> {
+  ///   var user = $.bind(getUser(id));
+  ///   var products = $.bind(getProducts(user.id()));
+  ///   return new Cart(user, products);
+  /// });
+  /// ```
+  ///
+  /// The scope is valid only while `generator` is running. Do not catch [Error] or [Throwable]
+  /// around `bind`: fail-fast control flow uses a private Error which this method handles.
+  /// Exceptions and errors thrown by application code otherwise propagate unchanged.
+  ///
+  /// Supply both method types with `Result.<Cart, DomainError>gen(...)` to use `var` without a
+  /// staged call. Use `Result.<DomainError>gen().run(...)` to specify only the error type while
+  /// inferring the successful type.
+  ///
+  /// @param generator The generator block to execute.
+  /// @param <T> The successful value returned by the block.
+  /// @param <E> The target error type, or `Object` when the invocation has no target type.
+  /// @return An `Ok` containing the block value, or the first bound `Err`.
+  static <T, E> Result<T, E> gen(GenFunction<T, E> generator) {
+    Objects.requireNonNull(generator, "generator cannot be null");
+
+    final var scope = new ResultGenScope<E>();
+    try {
+      final T value = generator.run(scope);
+      return scope.failed() ? err(scope.failure()) : ok(value);
+    } catch (final ResultGenAbort abort) {
+      if (abort != scope.abort()) {
+        throw abort;
+      }
+      return err(scope.failure());
+    } finally {
+      scope.close();
+    }
+  }
+
+  /// Starts a generator whose error type is selected explicitly.
+  ///
+  /// This staged form is useful with `var`, because Java cannot denote or infer a true union of
+  /// unrelated error types:
+  ///
+  /// ```java
+  /// var cart = Result.<CartError>gen().run($ -> {
+  ///   var user = $.bind(getUser(id));
+  ///   var products = $.bind(getProducts(user.id()));
+  ///   return new Cart(user, products);
+  /// });
+  /// ```
+  ///
+  /// Every bound error type must extend `E`; incompatible Results fail at compile time.
+  ///
+  /// @param <E> The shared error type accepted by the generator.
+  /// @return A reusable generator builder for `E`.
+  static <E> Gen<E> gen() {
+    return new Gen<>();
+  }
+
   /// # Example
   /// ```java
   /// Stream<Result<User, UserError>> results = userIds.stream().map(repo::findById);
@@ -553,6 +620,47 @@ public sealed interface Result<T, E> {
     T get() throws Exception;
   }
 
+  /// The scope supplied to a generator block.
+  ///
+  /// @param <E> The common supertype of errors that may be bound.
+  interface GenScope<E> {
+    /// Extracts an `Ok` value or exits the enclosing generator with the bound `Err`.
+    ///
+    /// @param result The Result to bind.
+    /// @param <T> The bound success type.
+    /// @return The success value when `result` is `Ok`.
+    <T> T bind(Result<T, ? extends E> result);
+  }
+
+  /// A generator block executed by [#gen(GenFunction)].
+  ///
+  /// @param <T> The successful value returned by the block.
+  /// @param <E> The common supertype of errors accepted by the scope.
+  @FunctionalInterface
+  interface GenFunction<T, E> {
+    /// Runs the block with its short-circuiting scope.
+    ///
+    /// @param scope The active generator scope.
+    /// @return The successful generated value.
+    T run(GenScope<E> scope);
+  }
+
+  /// A generator builder with an explicitly selected error type.
+  ///
+  /// @param <E> The common error type accepted by its generator scopes.
+  final class Gen<E> {
+    private Gen() {}
+
+    /// Executes a generator block, stopping at its first bound `Err`.
+    ///
+    /// @param generator The generator block to execute.
+    /// @param <T> The successful value returned by the block.
+    /// @return An `Ok` containing the block value, or the first bound `Err`.
+    public <T> Result<T, E> run(GenFunction<T, E> generator) {
+      return Result.gen(generator);
+    }
+  }
+
   /// Represents an `Ok` containing a non-null value.
   record Ok<T, E>(T value) implements Result<T, E> {
     public Ok {
@@ -571,5 +679,53 @@ public sealed interface Result<T, E> {
   enum Unit {
     /// The single Unit value.
     INSTANCE
+  }
+}
+
+final class ResultGenScope<E> implements Result.GenScope<E> {
+  private final ResultGenAbort abort = new ResultGenAbort();
+  private @Nullable E failure;
+  private boolean active = true;
+  private boolean failed;
+
+  @Override
+  public <T> T bind(Result<T, ? extends E> result) {
+    if (!active) {
+      throw new IllegalStateException("generator scope is no longer active");
+    }
+    if (failed) {
+      throw abort;
+    }
+
+    return switch (Objects.requireNonNull(result, "bound Result cannot be null")) {
+      case Result.Ok(var value) -> value;
+      case Result.Err(var error) -> {
+        failure = error;
+        failed = true;
+        throw abort;
+      }
+    };
+  }
+
+  ResultGenAbort abort() {
+    return abort;
+  }
+
+  boolean failed() {
+    return failed;
+  }
+
+  E failure() {
+    return Objects.requireNonNull(failure, "generator has no failure");
+  }
+
+  void close() {
+    active = false;
+  }
+}
+
+final class ResultGenAbort extends Error {
+  ResultGenAbort() {
+    super(null, null, false, false);
   }
 }
