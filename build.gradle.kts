@@ -30,7 +30,7 @@ subprojects {
 
   dependencies {
     // Nullability annotations
-    compileOnly(rootProject.libs.jspecify)
+    compileOnlyApi(rootProject.libs.jspecify)
 
     // JUnit 6 - unified BOM for all JUnit components
     testImplementation(platform(rootProject.libs.junit.bom))
