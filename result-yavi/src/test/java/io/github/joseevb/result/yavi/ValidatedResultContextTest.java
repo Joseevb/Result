@@ -46,6 +46,7 @@ class ValidatedResultContextTest {
         ValidatedResult.validate(user, CONTEXTUAL_VALIDATOR, strict);
 
     assertInstanceOf(Result.Ok.class, relaxedResult);
+    @SuppressWarnings("unchecked")
     final Result.Err<User, ConstraintViolations> err =
         assertInstanceOf(Result.Err.class, strictResult);
     assertEquals("name", err.error().getFirst().name());
@@ -58,6 +59,7 @@ class ValidatedResultContextTest {
     final Result<User, ConstraintViolations> result =
         ValidatedResult.validate(new User(""), CONTEXTUAL_VALIDATOR, Locale.FRENCH, strict);
 
+    @SuppressWarnings("unchecked")
     final Result.Err<User, ConstraintViolations> err = assertInstanceOf(Result.Err.class, result);
     assertEquals(Locale.FRENCH, err.error().getFirst().locale());
   }

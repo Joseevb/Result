@@ -25,6 +25,7 @@ class ValidatedResultLocaleTest {
     final Result<User, ConstraintViolations> result =
         ValidatedResult.validate(new User(""), USER_VALIDATOR, Locale.JAPANESE);
 
+    @SuppressWarnings("unchecked")
     final Result.Err<User, ConstraintViolations> err = assertInstanceOf(Result.Err.class, result);
     assertEquals(Locale.JAPANESE, err.error().getFirst().locale());
   }

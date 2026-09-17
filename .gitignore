@@ -36,6 +36,10 @@ bin/
 ### VS Code ###
 .vscode/
 
+### Zed ###
+.zed/
+codebook.toml
+
 ### Mac OS ###
 .DS_Store
 
