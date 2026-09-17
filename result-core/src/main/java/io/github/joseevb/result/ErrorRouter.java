@@ -42,7 +42,6 @@ import org.jspecify.annotations.NonNull;
 ///
 /// @param <E> the domain error type this router produces
 /// @author Jose
-/// @since 1.0.0
 public final class ErrorRouter<E> implements Function<Exception, E> {
 
   private final List<Rule<E>> rules;
@@ -112,6 +111,8 @@ public final class ErrorRouter<E> implements Function<Exception, E> {
   /// @throws NullPointerException if `type` or `mapper` is null
   public <X extends Exception> @NonNull ErrorRouter<E> map(
       @NonNull Class<X> type, @NonNull Function<X, E> mapper) {
+    Objects.requireNonNull(type, "Exception type cannot be null");
+    Objects.requireNonNull(mapper, "Exception mapper cannot be null");
     final var newRules = new ArrayList<Rule<E>>(this.rules.size() + 1);
     newRules.addAll(this.rules);
     newRules.add(new Rule<>(type, ex -> mapper.apply(type.cast(ex))));
@@ -133,12 +134,15 @@ public final class ErrorRouter<E> implements Function<Exception, E> {
   /// @throws NullPointerException if `exception` is null
   @Override
   public E apply(@NonNull Exception exception) {
+    Objects.requireNonNull(exception, "Exception cannot be null");
     for (final var rule : this.rules) {
       if (rule.matches(exception)) {
-        return rule.mapper().apply(exception);
+        return Objects.requireNonNull(
+            rule.mapper().apply(exception), "Exception mapper cannot return null");
       }
     }
-    return this.fallback.apply(exception);
+    return Objects.requireNonNull(
+        this.fallback.apply(exception), "Fallback mapper cannot return null");
   }
 
   /// Returns the number of registered rules (excluding the fallback).
@@ -156,6 +160,7 @@ public final class ErrorRouter<E> implements Function<Exception, E> {
   /// @param type the exception type to check
   /// @return `true` if a rule exists for the exact type
   public boolean hasRuleFor(@NonNull Class<? extends Exception> type) {
+    Objects.requireNonNull(type, "Exception type cannot be null");
     return this.rules.stream().anyMatch(r -> r.type().equals(type));
   }
 }

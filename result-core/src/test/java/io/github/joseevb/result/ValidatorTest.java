@@ -1,5 +1,7 @@
 package io.github.joseevb.result;
 
+import static io.github.joseevb.result.utils.TestNulls.n;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -12,6 +14,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -31,6 +34,90 @@ class ValidatorTest {
   }
 
   record ValidationError(String code, String message, Severity severity) {}
+
+  @Nested
+  @DisplayName("Null contracts")
+  class NullContractTests {
+
+    private final Person person = new Person("John", 30, "john@example.com", 100);
+    private final Validator<Person, String> validator = Validator.of(this.person);
+
+    @Test
+    @SuppressWarnings("all")
+    void rejectsNullArgumentsAtMethodEntry() {
+      assertAll(
+          () -> assertThrows(NullPointerException.class, () -> Validator.<Person, String>of(n())),
+          () ->
+              assertThrows(
+                  NullPointerException.class,
+                  () -> this.validator.validate(_ -> true, n(), "error")),
+          () ->
+              assertThrows(
+                  NullPointerException.class,
+                  () -> this.validator.validate(_ -> true, "field", (String) n())),
+          () ->
+              assertThrows(
+                  NullPointerException.class,
+                  () -> this.validator.validate(_ -> true, "field", (Supplier<String>) n())),
+          () ->
+              assertThrows(
+                  NullPointerException.class,
+                  () -> this.validator.validateIf(_ -> false, n())),
+          () ->
+              assertThrows(
+                  NullPointerException.class,
+                  () -> this.validator.nonNull(n(), "field", "error")),
+          () ->
+              assertThrows(
+                  NullPointerException.class,
+                  () -> this.validator.matches(n(), ".*", "field", "error")),
+          () ->
+              assertThrows(
+                  NullPointerException.class,
+                  () -> this.validator.matches(Person::name, n(), "field", "error")),
+          () ->
+              assertThrows(
+                  NullPointerException.class,
+                  () -> this.validator.range(n(), 0, 100, "field", "error")),
+          () ->
+              assertThrows(
+                  NullPointerException.class,
+                  () -> this.validator.length(n(), 0, 100, "field", "error")),
+          () -> assertThrows(NullPointerException.class, () -> this.validator.resultOr(n())),
+          () ->
+              assertThrows(
+                  NullPointerException.class,
+                  () ->
+                      Validator.<Person, String>compose(
+                          this.person, (UnaryOperator<Validator<Person, String>>[]) n())),
+          () ->
+              assertThrows(
+                  NullPointerException.class,
+                  () ->
+                      Validator.<Person, String>compose(
+                          this.person, (UnaryOperator<Validator<Person, String>>) n())));
+    }
+
+    @Test
+    @SuppressWarnings("all")
+    void rejectsNullValuesProducedByCallbacks() {
+      assertAll(
+          () ->
+              assertThrows(
+                  NullPointerException.class,
+                  () -> this.validator.validate(_ -> false, "field", () -> n())),
+          () ->
+              assertThrows(
+                  NullPointerException.class,
+                  () -> this.validator.validateIf(_ -> true, _ -> n())),
+          () ->
+              assertThrows(
+                  NullPointerException.class,
+                  () ->
+                      Validator.<Person, String>compose(
+                          this.person, (UnaryOperator<Validator<Person, String>>) _ -> n())));
+    }
+  }
 
   // ==================== Static Factory: of() ====================
 
@@ -165,15 +252,13 @@ class ValidatorTest {
     }
 
     @Test
-    @DisplayName("null field: no error recorded when condition passes")
+    @DisplayName("null field: throws even when condition passes")
     @SuppressWarnings("all")
     void validateEager_nullField_conditionPasses() {
       final var validator =
           Validator.<Person, String>of(new Person("John", 30, "john@example.com", 100));
-      final var result = validator.validate(_ -> true, null, "error");
 
-      assertSame(validator, result);
-      assertFalse(result.hasErrors());
+      assertThrows(NullPointerException.class, () -> validator.validate(_ -> true, null, "error"));
     }
   }
 
@@ -250,16 +335,15 @@ class ValidatorTest {
     }
 
     @Test
-    @DisplayName("null supplier: no error recorded when condition passes")
+    @DisplayName("null supplier: throws even when condition passes")
     @SuppressWarnings("all")
     void validateLazy_nullSupplier_conditionPasses() {
       final var validator =
           Validator.<Person, String>of(new Person("John", 30, "john@example.com", 100));
 
-      final var result = validator.validate(_ -> true, "field", (Supplier<String>) null);
-
-      assertSame(validator, result);
-      assertFalse(result.hasErrors());
+      assertThrows(
+          NullPointerException.class,
+          () -> validator.validate(_ -> true, "field", (Supplier<String>) null));
     }
   }
 
