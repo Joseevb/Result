@@ -61,12 +61,10 @@ class ValidatorTest {
                   () -> this.validator.validate(_ -> true, "field", (Supplier<String>) n())),
           () ->
               assertThrows(
-                  NullPointerException.class,
-                  () -> this.validator.validateIf(_ -> false, n())),
+                  NullPointerException.class, () -> this.validator.validateIf(_ -> false, n())),
           () ->
               assertThrows(
-                  NullPointerException.class,
-                  () -> this.validator.nonNull(n(), "field", "error")),
+                  NullPointerException.class, () -> this.validator.nonNull(n(), "field", "error")),
           () ->
               assertThrows(
                   NullPointerException.class,
@@ -108,8 +106,7 @@ class ValidatorTest {
                   () -> this.validator.validate(_ -> false, "field", () -> n())),
           () ->
               assertThrows(
-                  NullPointerException.class,
-                  () -> this.validator.validateIf(_ -> true, _ -> n())),
+                  NullPointerException.class, () -> this.validator.validateIf(_ -> true, _ -> n())),
           () ->
               assertThrows(
                   NullPointerException.class,

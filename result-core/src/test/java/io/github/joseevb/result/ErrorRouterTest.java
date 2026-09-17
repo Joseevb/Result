@@ -49,13 +49,11 @@ class ErrorRouterTest {
       assertAll(
           () ->
               assertThrows(
-                  NullPointerException.class,
-                  () -> ErrorRouter.<TestError>defaultsTo(n())),
+                  NullPointerException.class, () -> ErrorRouter.<TestError>defaultsTo(n())),
           () -> assertThrows(NullPointerException.class, () -> router.map(n(), _ -> n())),
           () ->
               assertThrows(
-                  NullPointerException.class,
-                  () -> router.map(RuntimeException.class, n())),
+                  NullPointerException.class, () -> router.map(RuntimeException.class, n())),
           () -> assertThrows(NullPointerException.class, () -> router.apply(n())),
           () -> assertThrows(NullPointerException.class, () -> router.hasRuleFor(n())));
     }
@@ -71,8 +69,7 @@ class ErrorRouterTest {
       assertAll(
           () ->
               assertThrows(
-                  NullPointerException.class,
-                  () -> nullFallback.apply(new Exception("failed"))),
+                  NullPointerException.class, () -> nullFallback.apply(new Exception("failed"))),
           () ->
               assertThrows(
                   NullPointerException.class,
