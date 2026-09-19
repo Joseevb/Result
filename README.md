@@ -11,7 +11,7 @@ an `Ok` value of type `T` or an `Err` value of type `E`.
 
 - Java 25
 - Gradle 9.x for building this repository
-- Spring Boot 4.0.3 for the tested Spring MVC integration module
+- Spring Boot 4.1.1 for the tested Spring MVC integration module
 
 The repository is built with Gradle. The published artifacts can also be consumed from Maven.
 

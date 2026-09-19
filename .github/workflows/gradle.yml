@@ -60,3 +60,6 @@ jobs:
 
       - name: Run all implementations
         run: ./gradlew :result-core:examples -PexampleArgs='all --impl=both'
+
+      - name: Run YAVI examples
+        run: ./gradlew :result-yavi:examples
