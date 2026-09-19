@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -47,7 +48,6 @@ import org.jspecify.annotations.NonNull;
 /// @param <E> the error type produced by failed validations
 /// @see Result
 /// @author Jose
-/// @since 1.0.0
 public final class Validator<T, E> {
 
   private final T target;
@@ -58,8 +58,8 @@ public final class Validator<T, E> {
   /// @param target the object being validated
   /// @param errors the accumulated errors — ownership is transferred to this instance
   private Validator(T target, Map<String, E> errors) {
-    this.target = target;
-    this.errors = errors;
+    this.target = Objects.requireNonNull(target, "Target cannot be null");
+    this.errors = Objects.requireNonNull(errors, "Errors cannot be null");
   }
 
   /// Creates a new, empty validator for the given target.
@@ -74,6 +74,7 @@ public final class Validator<T, E> {
   /// @param <T>    the target type
   /// @param <E>    the error type
   /// @return a new, empty validator for the target
+  /// @throws NullPointerException if `target` is null
   public static <T, E> @NonNull Validator<T, E> of(T target) {
     return new Validator<>(target, new HashMap<>());
   }
@@ -88,7 +89,9 @@ public final class Validator<T, E> {
   /// @return a new validator with the error appended
   private @NonNull Validator<T, E> withError(@NonNull String field, E error) {
     final var next = new HashMap<>(this.errors);
-    next.put(field, error);
+    next.put(
+        Objects.requireNonNull(field, "Field cannot be null"),
+        Objects.requireNonNull(error, "Error cannot be null"));
     return new Validator<>(this.target, next);
   }
 
@@ -112,6 +115,9 @@ public final class Validator<T, E> {
   /// @throws NullPointerException if any parameter is null
   public @NonNull Validator<T, E> validate(
       @NonNull Predicate<T> condition, @NonNull String field, @NonNull Supplier<E> errorSupplier) {
+    Objects.requireNonNull(condition, "Condition cannot be null");
+    Objects.requireNonNull(field, "Field cannot be null");
+    Objects.requireNonNull(errorSupplier, "Error supplier cannot be null");
     return condition.test(this.target) ? this : this.withError(field, errorSupplier.get());
   }
 
@@ -133,9 +139,12 @@ public final class Validator<T, E> {
   /// @param field     the field name for error reporting
   /// @param error     the error to record if validation fails
   /// @return `this` if the predicate passes, otherwise a new validator with the error recorded
-  /// @throws NullPointerException if `condition` or `field` is null
+  /// @throws NullPointerException if any parameter is null
   public @NonNull Validator<T, E> validate(
       @NonNull Predicate<T> condition, @NonNull String field, E error) {
+    Objects.requireNonNull(condition, "Condition cannot be null");
+    Objects.requireNonNull(field, "Field cannot be null");
+    Objects.requireNonNull(error, "Error cannot be null");
     return condition.test(this.target) ? this : this.withError(field, error);
   }
 
@@ -157,7 +166,11 @@ public final class Validator<T, E> {
   /// @throws NullPointerException if any parameter is null
   public @NonNull Validator<T, E> validateIf(
       @NonNull Predicate<T> condition, @NonNull UnaryOperator<Validator<T, E>> validation) {
-    return condition.test(this.target) ? validation.apply(this) : this;
+    Objects.requireNonNull(condition, "Condition cannot be null");
+    Objects.requireNonNull(validation, "Validation cannot be null");
+    return condition.test(this.target)
+        ? Objects.requireNonNull(validation.apply(this), "Validation cannot return null")
+        : this;
   }
 
   /// Validates that a field extracted from the target is non-null.
@@ -171,9 +184,12 @@ public final class Validator<T, E> {
   /// @param error     the error to record if the field is null
   /// @param <U>       the field type
   /// @return `this` if the field is non-null, otherwise a new validator with the error recorded
-  /// @throws NullPointerException if `extractor` or `field` is null
+  /// @throws NullPointerException if any parameter is null
   public <U> @NonNull Validator<T, E> nonNull(
       @NonNull Function<T, U> extractor, @NonNull String field, E error) {
+    Objects.requireNonNull(extractor, "Extractor cannot be null");
+    Objects.requireNonNull(field, "Field cannot be null");
+    Objects.requireNonNull(error, "Error cannot be null");
     return this.validate(t -> extractor.apply(t) != null, field, error);
   }
 
@@ -201,6 +217,10 @@ public final class Validator<T, E> {
       @NonNull String pattern,
       @NonNull String field,
       E error) {
+    Objects.requireNonNull(extractor, "Extractor cannot be null");
+    Objects.requireNonNull(pattern, "Pattern cannot be null");
+    Objects.requireNonNull(field, "Field cannot be null");
+    Objects.requireNonNull(error, "Error cannot be null");
     return this.validate(
         t -> {
           final var value = extractor.apply(t);
@@ -228,6 +248,9 @@ public final class Validator<T, E> {
   /// @throws NullPointerException if any parameter is null
   public <N extends Number> @NonNull Validator<T, E> range(
       @NonNull Function<T, N> extractor, double min, double max, @NonNull String field, E error) {
+    Objects.requireNonNull(extractor, "Extractor cannot be null");
+    Objects.requireNonNull(field, "Field cannot be null");
+    Objects.requireNonNull(error, "Error cannot be null");
     return this.validate(
         t -> {
           final var value = extractor.apply(t);
@@ -256,6 +279,9 @@ public final class Validator<T, E> {
   /// @throws NullPointerException if any parameter is null
   public @NonNull Validator<T, E> length(
       @NonNull Function<T, String> extractor, int min, int max, @NonNull String field, E error) {
+    Objects.requireNonNull(extractor, "Extractor cannot be null");
+    Objects.requireNonNull(field, "Field cannot be null");
+    Objects.requireNonNull(error, "Error cannot be null");
     return this.validate(
         t -> {
           final var value = extractor.apply(t);
@@ -297,6 +323,7 @@ public final class Validator<T, E> {
   /// @return a `Result` wrapping either the valid target or the mapped error
   /// @throws NullPointerException if `errorMapper` is null
   public <F> @NonNull Result<T, F> resultOr(@NonNull Function<Map<String, E>, F> errorMapper) {
+    Objects.requireNonNull(errorMapper, "Error mapper cannot be null");
     return this.errors.isEmpty()
         ? Result.ok(this.target)
         : Result.err(errorMapper.apply(Map.copyOf(this.errors)));
@@ -345,6 +372,13 @@ public final class Validator<T, E> {
   @SafeVarargs
   public static <T, E> @NonNull Validator<T, E> compose(
       T target, UnaryOperator<Validator<T, E>> @NonNull ... validations) {
-    return Arrays.stream(validations).reduce(of(target), (v, fn) -> fn.apply(v), (a, b) -> b);
+    return Arrays.stream(Objects.requireNonNull(validations, "Validations cannot be null"))
+        .map(validation -> Objects.requireNonNull(validation, "Validation cannot be null"))
+        .reduce(
+            of(target),
+            (validator, validation) ->
+                Objects.requireNonNull(
+                    validation.apply(validator), "Validation cannot return null"),
+            (_, right) -> right);
   }
 }

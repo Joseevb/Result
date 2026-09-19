@@ -1,9 +1,12 @@
 package io.github.joseevb.result;
 
+import static io.github.joseevb.result.utils.TestNulls.n;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.function.Function;
@@ -30,6 +33,47 @@ class ErrorRouterTest {
     @Override
     public String getMessage() {
       return this.message;
+    }
+  }
+
+  @Nested
+  @DisplayName("Null contracts")
+  class NullContractTests {
+
+    @Test
+    @SuppressWarnings("all")
+    void rejectsNullArgumentsAtMethodEntry() {
+      final ErrorRouter<TestError> router =
+          ErrorRouter.defaultsTo(exception -> new UnknownError(exception.getMessage()));
+
+      assertAll(
+          () ->
+              assertThrows(
+                  NullPointerException.class, () -> ErrorRouter.<TestError>defaultsTo(n())),
+          () -> assertThrows(NullPointerException.class, () -> router.map(n(), _ -> n())),
+          () ->
+              assertThrows(
+                  NullPointerException.class, () -> router.map(RuntimeException.class, n())),
+          () -> assertThrows(NullPointerException.class, () -> router.apply(n())),
+          () -> assertThrows(NullPointerException.class, () -> router.hasRuleFor(n())));
+    }
+
+    @Test
+    @SuppressWarnings("all")
+    void rejectsNullValuesProducedByMappers() {
+      final ErrorRouter<TestError> nullFallback = ErrorRouter.defaultsTo(_ -> n());
+      final ErrorRouter<TestError> nullRule =
+          ErrorRouter.<TestError>defaultsTo(_ -> new UnknownError("fallback"))
+              .map(RuntimeException.class, _ -> n());
+
+      assertAll(
+          () ->
+              assertThrows(
+                  NullPointerException.class, () -> nullFallback.apply(new Exception("failed"))),
+          () ->
+              assertThrows(
+                  NullPointerException.class,
+                  () -> nullRule.apply(new RuntimeException("failed"))));
     }
   }
 
