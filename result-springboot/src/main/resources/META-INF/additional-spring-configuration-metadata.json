@@ -1,0 +1,10 @@
+{
+  "properties": [
+    {
+      "name": "result.transactions.rollback-on-err",
+      "type": "java.lang.Boolean",
+      "description": "Whether a transactional method that returns Result.Err marks the transaction rollback-only.",
+      "defaultValue": true
+    }
+  ]
+}

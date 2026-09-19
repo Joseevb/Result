@@ -395,6 +395,24 @@ Problem details use `error.<FailureSimpleName>` for the localized detail and
 `error.title.<FailureSimpleName>` for the localized title. `getMessageArgs()` is supplied only to
 the detail message. Missing messages fall back to `getMessage()` and `getTitle()`.
 
+### Transactional Results
+
+When Spring transaction management is active, `result-springboot` also handles transactional
+methods that return `Result`:
+
+- A final `Result.Ok` commits normally.
+- A final `Result.Err` marks the current transaction rollback-only, regardless of its error type.
+
+Only the `Result` returned by the transactional method is considered. An intermediate `Err` that is
+recovered into `Ok` before returning does not cause a rollback.
+
+Rollback on `Err` is enabled by default. Applications can opt out without disabling the other
+Spring integration features:
+
+```properties
+result.transactions.rollback-on-err=false
+```
+
 ## YAVI Integration
 
 For applications that need YAVI's richer validation model, use the optional `result-yavi` artifact,
