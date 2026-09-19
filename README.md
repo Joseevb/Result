@@ -174,6 +174,77 @@ Result<String, String> combined = Result.ok("user").combine(
 );
 ```
 
+### Generator-style composition
+
+`Result.gen` makes dependent Result operations read like ordinary sequential Java. `bind` extracts
+an `Ok`; the first `Err` exits the block immediately, so later statements are not evaluated:
+
+```java
+var result = Result.gen($ -> {
+    var user = $.bind(getUser(id));
+    var products = $.bind(getProducts(user.id()));
+
+    return new Cart(user, products);
+});
+```
+
+Java cannot express a general union such as `UserError | ProductError`. More subtly, `javac` does
+not use calls made through the lambda parameter to infer the enclosing invocation's error type. The
+exact type inferred for the example above is therefore:
+
+```java
+Result<Cart, Object>
+```
+
+This is type-safe and keeps the original error object unchanged, but `Object` does not describe the
+closed set of possible errors. A target type can retain an existing shared error hierarchy:
+
+```java
+Result<Cart, CartError> result = Result.gen($ -> {
+    var user = $.bind(getUser(id));             // UserError extends CartError
+    var products = $.bind(getProducts(user.id())); // ProductError extends CartError
+
+    return new Cart(user, products);
+});
+```
+
+Using `var` without `.run()` is also possible by supplying both method type arguments:
+
+```java
+var result = Result.<Cart, CartError>gen($ -> {
+    var user = $.bind(getUser(id));
+    var products = $.bind(getProducts(user.id()));
+
+    return new Cart(user, products);
+});
+// result is Result<Cart, CartError>
+```
+
+When `var` should infer the successful type, select only the error type with the staged overload:
+
+```java
+var result = Result.<CartError>gen().run($ -> {
+    var user = $.bind(getUser(id));
+    var products = $.bind(getProducts(user.id()));
+
+    return new Cart(user, products);
+});
+// result is Result<Cart, CartError>
+```
+
+Every error passed to the staged scope must extend `CartError`; an incompatible bind is a compile
+error. This avoids unchecked error casts and does not impose a fixed `Union2`, `Union3`, ... arity,
+but Java requires the shared nominal type to be declared by the application. For unrelated errors,
+use the direct `var` form and handle `Object`, map errors to an application error before binding, or
+introduce a shared domain error type.
+
+The generator scope is valid only during its block. Application exceptions and errors propagate
+normally. Avoid catching `Error` or `Throwable` around `bind`, because fail-fast behavior uses a
+private, stackless control-flow error internally. Generated values and bound Results must be
+non-null.
+See [Generator-style Result composition](docs/generator-composition.md) for the Java inference
+details and the alternatives considered.
+
 ### Recovery and Inspection
 
 ```java
