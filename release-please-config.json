@@ -63,6 +63,10 @@
         {
           "type": "generic",
           "path": "build.gradle.kts"
+        },
+        {
+          "type": "generic",
+          "path": "README.md"
         }
       ]
     }
