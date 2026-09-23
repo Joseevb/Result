@@ -19,24 +19,29 @@ The repository is built with Gradle. The published artifacts can also be consume
 
 ### Gradle
 
+<!-- x-release-please-start-version -->
 ```kotlin
 dependencies {
     implementation("io.github.joseevb:result-core:0.1.0")
 }
 ```
+<!-- x-release-please-end -->
 
 For servlet-based Spring MVC response handling, add the integration module and provide the Spring
 Boot MVC dependencies in the application:
 
+<!-- x-release-please-start-version -->
 ```kotlin
 dependencies {
     implementation("io.github.joseevb:result-springboot:0.1.0")
     implementation("org.springframework.boot:spring-boot-starter-web")
 }
 ```
+<!-- x-release-please-end -->
 
 ### Maven
 
+<!-- x-release-please-start-version -->
 ```xml
 <dependency>
     <groupId>io.github.joseevb</groupId>
@@ -44,9 +49,11 @@ dependencies {
     <version>0.1.0</version>
 </dependency>
 ```
+<!-- x-release-please-end -->
 
 The Spring MVC integration artifact is:
 
+<!-- x-release-please-start-version -->
 ```xml
 <dependency>
     <groupId>io.github.joseevb</groupId>
@@ -54,6 +61,7 @@ The Spring MVC integration artifact is:
     <version>0.1.0</version>
 </dependency>
 ```
+<!-- x-release-please-end -->
 
 The integration module declares Spring Boot dependencies as `compileOnly`; the consuming
 application must provide compatible Spring MVC and Spring Boot dependencies.
@@ -418,11 +426,13 @@ result.transactions.rollback-on-err=false
 For applications that need YAVI's richer validation model, use the optional `result-yavi` artifact,
 introduced in Result 0.2.0:
 
+<!-- x-release-please-start-version -->
 ```kotlin
 dependencies {
     implementation("io.github.joseevb:result-yavi:0.2.0")
 }
 ```
+<!-- x-release-please-end -->
 
 `result-core` remains completely independent from YAVI. The built-in `Validator<T, E>` remains the
 simpler dependency-free option for small, local checks. `ValidatedResult` adapts YAVI's
