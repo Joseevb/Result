@@ -22,7 +22,7 @@ The repository is built with Gradle. The published artifacts can also be consume
 <!-- x-release-please-start-version -->
 ```kotlin
 dependencies {
-    implementation("io.github.joseevb:result-core:0.1.0")
+    implementation("io.github.joseevb:result-core:0.2.0")
 }
 ```
 <!-- x-release-please-end -->
@@ -33,7 +33,7 @@ Boot MVC dependencies in the application:
 <!-- x-release-please-start-version -->
 ```kotlin
 dependencies {
-    implementation("io.github.joseevb:result-springboot:0.1.0")
+    implementation("io.github.joseevb:result-springboot:0.2.0")
     implementation("org.springframework.boot:spring-boot-starter-web")
 }
 ```
@@ -46,7 +46,7 @@ dependencies {
 <dependency>
     <groupId>io.github.joseevb</groupId>
     <artifactId>result-core</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 <!-- x-release-please-end -->
@@ -58,7 +58,7 @@ The Spring MVC integration artifact is:
 <dependency>
     <groupId>io.github.joseevb</groupId>
     <artifactId>result-springboot</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 <!-- x-release-please-end -->
