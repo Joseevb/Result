@@ -10,3 +10,5 @@ pluginManagement {
 include("result-core")
 include("result-springboot")
 include("result-yavi")
+include("result-gen")
+include("result-gen-example")
