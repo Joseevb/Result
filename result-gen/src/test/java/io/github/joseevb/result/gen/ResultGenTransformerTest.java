@@ -22,7 +22,8 @@ class ResultGenTransformerTest {
   @Test
   void generatedSourceCompilesWithJavacAndContainsHeterogeneousUnion()
       throws IOException, URISyntaxException {
-    String source = """
+    String source =
+        """
         package prototype;
 
         import io.github.joseevb.result.Result;
@@ -68,7 +69,8 @@ class ResultGenTransformerTest {
       entries.addAll(java.util.List.of(currentClasspath.split(java.io.File.pathSeparator)));
     }
     entries.add(
-        Path.of(Result.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toString());
+        Path.of(Result.class.getProtectionDomain().getCodeSource().getLocation().toURI())
+            .toString());
     entries.add(
         Path.of(
                 ResultGenTransformer.class
@@ -80,8 +82,7 @@ class ResultGenTransformerTest {
     String classpath = String.join(java.io.File.pathSeparator, entries);
 
     String transformed =
-        ResultGenTransformer.transform(
-            source, "Fixture.java", entries.toArray(String[]::new));
+        ResultGenTransformer.transform(source, "Fixture.java", entries.toArray(String[]::new));
 
     assertTrue(transformed.contains("sealed interface ResultGenErrors_"));
     assertTrue(transformed.contains("record Bind0(prototype.Fixture.UserError value)"));
@@ -91,8 +92,8 @@ class ResultGenTransformerTest {
     assertTrue(transformed.contains(".Bind0(var error) ->"));
     assertTrue(transformed.contains(".Bind1(var error) ->"));
 
-    String nonExhaustive = source.replace(
-        "              case ProductError error -> error.message();\n", "");
+    String nonExhaustive =
+        source.replace("              case ProductError error -> error.message();\n", "");
     assertThrows(
         IllegalArgumentException.class,
         () ->

@@ -200,9 +200,11 @@ public final class ResultGenTransformer {
     for (Object statement : statements) {
       if (!(statement instanceof SwitchCase switchCase)) continue;
       String caseSource =
-          source.substring(
-              switchCase.getStartPosition(),
-              switchCase.getStartPosition() + switchCase.getLength()).strip();
+          source
+              .substring(
+                  switchCase.getStartPosition(),
+                  switchCase.getStartPosition() + switchCase.getLength())
+              .strip();
       switchLabels.add(caseSource);
       Matcher matcher = labelPattern.matcher(caseSource);
       if (!matcher.matches()) continue;
@@ -224,10 +226,7 @@ public final class ResultGenTransformer {
     if (caseEdits.size() != switchLabels.size()) {
       String unsupported =
           switchLabels.stream()
-              .filter(
-                  label ->
-                      !label.matches(
-                          "^case\\s+[\\w.$]+\\s+[A-Za-z_$][\\w$]*\\s*->$"))
+              .filter(label -> !label.matches("^case\\s+[\\w.$]+\\s+[A-Za-z_$][\\w$]*\\s*->$"))
               .findFirst()
               .orElseGet(
                   () ->
@@ -282,22 +281,33 @@ public final class ResultGenTransformer {
       }
       Expression resultExpression = (Expression) invocation.arguments().getFirst();
       ITypeBinding resultType = resultExpression.resolveTypeBinding();
-      if (resultType == null || resultType.getTypeArguments().length != 2
-          || !resultType.getErasure().getQualifiedName()
+      if (resultType == null
+          || resultType.getTypeArguments().length != 2
+          || !resultType
+              .getErasure()
+              .getQualifiedName()
               .equals("io.github.joseevb.result.Result")) {
         throw new IllegalArgumentException(
             "Cannot resolve bind argument as Result<T, E>: " + resultExpression);
       }
       String successType = sourceType(resultType.getTypeArguments()[0]);
       String errorType = sourceType(resultType.getTypeArguments()[1]);
-      if (successType.isBlank() || errorType.isBlank()
-          || successType.contains("capture#") || errorType.contains("capture#")
-          || successType.contains("?") || errorType.contains("?")) {
+      if (successType.isBlank()
+          || errorType.isBlank()
+          || successType.contains("capture#")
+          || errorType.contains("capture#")
+          || successType.contains("?")
+          || errorType.contains("?")) {
         throw new IllegalArgumentException(
             "Wildcard/captured bind types are not supported yet: " + resultType);
       }
-      binds.add(new Bind(statement, resultExpression.toString(),
-          fragment.getName().getIdentifier(), successType, errorType));
+      binds.add(
+          new Bind(
+              statement,
+              resultExpression.toString(),
+              fragment.getName().getIdentifier(),
+              successType,
+              errorType));
     }
     return binds;
   }
@@ -321,15 +331,22 @@ public final class ResultGenTransformer {
 
   private static String digest(String value) {
     try {
-      return HexFormat.of().formatHex(
-          MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+      return HexFormat.of()
+          .formatHex(
+              MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
     } catch (NoSuchAlgorithmException exception) {
       throw new AssertionError(exception);
     }
   }
 
   private record GenCall(MethodInvocation invocation, Block body) {}
-  private record Bind(Statement statement, String expression, String variable,
-      String successType, String errorType) {}
+
+  private record Bind(
+      Statement statement,
+      String expression,
+      String variable,
+      String successType,
+      String errorType) {}
+
   private record Edit(int start, int length, String replacement) {}
 }

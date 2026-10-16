@@ -10,7 +10,8 @@ public class Main {
 
   record Cart(User user, List<Product> products) {}
 
-  // Deliberately independent error records: neither extends a shared application error type.
+  // Deliberately independent error records: neither extends a shared application
+  // error type.
   record UserError(long id, String message) {}
 
   record ProductError(long userId, String message) {}
@@ -36,11 +37,12 @@ public class Main {
         });
   }
 
-  public static void main(String[] args) {
+  void main() {
     var success = getCart(42);
-    if (!success.isOk() || !success.unwrap().products().getFirst().name().equals("Keyboard")) {
-      throw new AssertionError("Expected successful cart, got " + success);
-    }
+
+    assert success.isOk() : "Expected Ok, got " + success;
+    assert success.unwrap().products().getFirst().name().equals("Keyboard")
+        : "Expected Keyboard, got " + success.unwrap().products().getFirst().name();
 
     assertErrorMessage(getCart(0), "user not found");
     assertErrorMessage(getCart(13), "catalog unavailable");
@@ -61,8 +63,8 @@ public class Main {
           case UserError error -> error.message();
           case ProductError error -> error.message();
         };
-    if (!message.equals(expectedMessage)) {
-      throw new AssertionError("Expected message " + expectedMessage + ", got " + message);
-    }
+
+    assert message.equals(expectedMessage)
+        : "Expected message %s, got %s".formatted(expectedMessage, message);
   }
 }
