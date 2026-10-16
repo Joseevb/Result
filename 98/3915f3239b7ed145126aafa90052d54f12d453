@@ -1,0 +1,18 @@
+result-gen-example/src/main/java/demo/Main.java
+  h_03c6f94f0c4d1a 13-14,40,42-45,66-68
+result-gen/src/main/java/io/github/joseevb/result/gen/ResultGenTransformer.java
+  h_03c6f94f0c4d1a 203-207,229,284-288,295-300,304-310,334-336,343-350
+result-gen/src/test/java/io/github/joseevb/result/gen/ResultGenTransformerTest.java
+  h_03c6f94f0c4d1a 25-26,72-73,85,95-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "983915f3239b7ed145126aafa90052d54f12d453",
+  "prompts": {},
+  "humans": {
+    "h_03c6f94f0c4d1a": {
+      "author": "Jose Esteban Vasquez Barboza <joseevb@protonmail.com>"
+    }
+  }
+}
